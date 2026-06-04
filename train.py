@@ -1,7 +1,8 @@
 # %% IMPORTS
-from . import transformers, helpers
-from dataclasses import dataclass
-import os
-import wandb
+from modular_addition import transformers
 
-# %% Basic 
+# %% CONFIG
+config = transformers.Config(num_epochs=30_000)
+
+# %% TRAIN
+transformers.train_model(config)
