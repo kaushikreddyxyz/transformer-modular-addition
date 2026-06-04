@@ -15,7 +15,14 @@ import time
 import torch.nn.functional as F
 import einops
 import random 
-from . import helpers 
+try:
+    from . import helpers
+except Exception:
+    # Allow running this file as a script (no parent package).
+    # Fallback: add this module's directory to `sys.path` and import `helpers` directly.
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    import helpers
 from dataclasses import dataclass
 import os
 import wandb
@@ -604,3 +611,5 @@ def train_model(config: Config):
     world.post_training_save(save_optimizer_and_scheduler=True)
     helpers.lines([world.train_losses, world.test_losses], labels=['train', 'test'], log_y=True)
     return world # to export the dictionary with the training metrics
+
+# %%
