@@ -15,14 +15,7 @@ import time
 import torch.nn.functional as F
 import einops
 import random 
-try:
-    from . import helpers
-except Exception:
-    # Allow running this file as a script (no parent package).
-    # Fallback: add this module's directory to `sys.path` and import `helpers` directly.
-    import sys, os
-    sys.path.insert(0, os.path.dirname(__file__))
-    import helpers
+from . import helpers
 from dataclasses import dataclass
 import os
 import wandb
