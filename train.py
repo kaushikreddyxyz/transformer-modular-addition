@@ -1,4 +1,5 @@
 # %% IMPORTS
+from wandb.docker import push
 import dataclasses
 import time
 
@@ -132,19 +133,29 @@ wandb.log_artifact(artifact)
 # Uncomment the bottom line to push. Requires `huggingface-cli login` (or HF_TOKEN
 # env var) once on this machine. transformer.Transformer isn't a PreTrainedModel,
 # so model.push_to_hub doesn't apply — we upload the raw state_dict file directly.
-def push_to_hf(repo_id: str, run_name: str | None = None):
+def push_to_hf(repo_name: str | None = None, run_name: str = trainer.run_name, final_path: str | None = None):
     from huggingface_hub import HfApi
-    name = run_name or trainer.run_name
-    final_path = helpers.root / name / "final.pth"
-    HfApi().upload_file(
+    api = HfApi()
+
+
+    user_name: str = api.whoami()["name"]
+
+    if not final_path:
+        final_path = f"{helpers.root}/{run_name}/final.pth"
+    if not repo_name:
+        repo_name = run_name
+    if not (user_name in repo_name):
+        repo_name = f"{user_name}/{repo_name}"
+    
+    api.create_repo(repo_id=repo_name, repo_type="model", exist_ok=True)
+    
+    api.upload_file(
         path_or_fileobj=str(final_path),
         path_in_repo="final.pth",
-        repo_id=repo_id,
+        repo_id=repo_name,
         repo_type="model",
     )
-    print(f"Uploaded {final_path} → https://huggingface.co/{repo_id}")
+    print(f"Uploaded {final_path} → https://huggingface.co/{repo_name}")
 
+# push_to_hf()
 
-# push_to_hf("kaushikreddyxyz/grok-modular-addition")
-
-# %%
