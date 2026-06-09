@@ -445,11 +445,13 @@ def gen_train_test(config: Config):
 
 # TODO what type for model?
 def full_loss(config : Config, model: Transformer, data):
-    '''Takes the cross entropy loss of the model on the data'''
-    # Take the final position only
+    '''Cross-entropy loss + top-1 accuracy on the data. Accuracy is essentially
+    free since it reuses the same final-position logits as the loss.'''
     logits = model(data)[:, -1]
     labels = t.tensor([config.fn(i, j) for i, j, _ in data]).to(config.device)
-    return helpers.cross_entropy_high_precision(logits, labels)
+    loss = helpers.cross_entropy_high_precision(logits, labels)
+    accuracy = (logits.detach().argmax(-1) == labels).float().mean()
+    return loss, accuracy
 
 
 class Trainer:
@@ -464,18 +466,20 @@ class Trainer:
     '''
 
     def __init__(self, config : Config, model = None) -> None:
-        wandb.init(project = "grokking", config = dataclasses.asdict(config))
+        self.run_name = f"grok_{int(time.time())}"
+        wandb.init(project = "grokking", config = dataclasses.asdict(config), name = self.run_name)
         self.model = model if model is not None else Transformer(config, use_cache=False)
         self.model.to(config.device)
         self.optimizer = optim.AdamW(self.model.parameters(), lr = config.lr, weight_decay=config.weight_decay, betas=(0.9, 0.98))
         self.scheduler = optim.lr_scheduler.LambdaLR(self.optimizer, lambda step: min(step/10, 1)) # TODO make this a config option
-        self.run_name = f"grok_{int(time.time())}"
         self.train, self.test = gen_train_test(config = config)
         self.metrics_dictionary = defaultdict(dict) # so we can safely call 'update' on keys
         print('training length = ', len(self.train))
         print('testing length = ', len(self.test))
         self.train_losses = []
         self.test_losses = []
+        self.train_accuracies = []
+        self.test_accuracies = []
         self.config = config
 
     def save_epoch(self, epoch, save_to_wandb = True):
@@ -495,11 +499,14 @@ class Trainer:
         self.metrics_dictionary[epoch].update(save_dict)
 
     def do_a_training_step(self, epoch: int):
-        '''returns train_loss, test_loss'''
-        train_loss = full_loss(config = self.config, model = self.model, data = self.train)
-        test_loss = full_loss(config = self.config, model = self.model, data = self.test)
+        '''returns train_loss, test_loss. Accuracies are appended to
+        self.train_accuracies / self.test_accuracies for side-channel readout.'''
+        train_loss, train_accuracy = full_loss(config = self.config, model = self.model, data = self.train)
+        test_loss, test_accuracy = full_loss(config = self.config, model = self.model, data = self.test)
         self.train_losses.append(train_loss.item())
         self.test_losses.append(test_loss.item())
+        self.train_accuracies.append(train_accuracy.item())
+        self.test_accuracies.append(test_accuracy.item())
         if epoch % 100 == 0:
             # TODO is this ok? this was np.log, and it was barking at me ; i think np.log was being interpreted as a logging module
             print(f'Epoch {epoch}, train loss {t.log(train_loss).item():.4f}, test loss {t.log(test_loss).item():.4f}')

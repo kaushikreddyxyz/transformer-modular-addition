@@ -1,79 +1,150 @@
 # %% IMPORTS
-from modular_addition import transformers, helpers
-from transformers import Trainer as HFTrainer, TrainingArguments
-from torch.utils.data import Dataset
-import torch as t
+import dataclasses
 import time
+
+import torch as t
 import wandb
+from torch.utils.data import Dataset
+from tqdm.auto import tqdm
+
+from modular_addition import transformer, helpers
+from transformers import Trainer as HFTrainer, TrainingArguments
+
+
+def pick_device() -> t.device:
+    """CUDA → MPS → CPU. Override of Config.device's hardcoded cuda default."""
+    if t.cuda.is_available():
+        return t.device("cuda")
+    if t.backends.mps.is_available():
+        return t.device("mps")
+    return t.device("cpu")
+
 
 # %% CONFIG
-config = transformers.Config(num_epochs=30_000)
+device = pick_device()
+print(f"Using device: {device}")
+config = dataclasses.replace(
+    transformer.Config(num_epochs=20_000),
+    device=device,
+)
 
 # %% PART 1 — local Trainer (grokking paper)
-trainer = transformers.Trainer(config)
+trainer = transformer.Trainer(config)
 trainer.initial_save_if_appropriate()
-for epoch in range(config.num_epochs):
+
+# Chart all metrics against the logged `epoch` field rather than wandb's internal
+# step counter — this lets the per-epoch loss log and Trainer.take_metrics' periodic
+# log coexist on the same x-axis without step-monotonicity coordination.
+wandb.define_metric("epoch")
+wandb.define_metric("*", step_metric="epoch")
+
+pbar = tqdm(range(config.num_epochs), desc="grokking-local", mininterval=0.5)
+for epoch in pbar:
     train_loss, test_loss = trainer.do_a_training_step(epoch)
+    wandb.log({
+        "epoch": epoch,
+        "train_loss": train_loss.item(),
+        "test_loss": test_loss.item(),
+        "log_train_loss": t.log(train_loss).item(),
+        "log_test_loss": t.log(test_loss).item(),
+        "train_accuracy": trainer.train_accuracies[-1],
+        "test_accuracy": trainer.test_accuracies[-1],
+        "lr": trainer.scheduler.get_last_lr()[0],
+        "weight_l2": sum(p.detach().pow(2).sum().item() for p in trainer.model.parameters()) ** 0.5,
+    })
+    if epoch % config.take_metrics_every_n_epochs == 0:
+        trainer.take_metrics(trainer.train, epoch)
+    pbar.set_postfix(train=f"{train_loss.item():.4f}", test=f"{test_loss.item():.4f}")
     if test_loss.item() < config.stopping_thresh:
         break
+
 trainer.post_training_save()
 
-# %% PART 2 — HuggingFace Trainer
-# Close the wandb run opened by the local Trainer above so HFTrainer can start its own.
-wandb.finish()
+# Upload the final checkpoint as a proper wandb Artifact (downloadable from the
+# UI). The Trainer's own wandb.log(state_dict) in post_training_save tries to push
+# raw tensors through the scalar-metric API and doesn't render usefully.
+final_pth = helpers.root / trainer.run_name / "final.pth"
+artifact = wandb.Artifact(name=trainer.run_name, type="model")
+artifact.add_file(str(final_pth))
+wandb.log_artifact(artifact)
+
+# # %% PART 2 — HuggingFace Trainer
+# # Close the wandb run opened by the local Trainer so HFTrainer can start its own.
+# wandb.finish()
 
 
-class ModularAdditionDataset(Dataset):
-    def __init__(self, pairs, fn):
-        self.x = t.tensor([[i, j, p] for (i, j, p) in pairs], dtype=t.long)
-        self.labels = t.tensor([fn(i, j) for (i, j, _) in pairs], dtype=t.long)
+# class ModularAdditionDataset(Dataset):
+#     def __init__(self, pairs, fn):
+#         self.x = t.tensor([[i, j, p] for (i, j, p) in pairs], dtype=t.long)
+#         self.labels = t.tensor([fn(i, j) for (i, j, _) in pairs], dtype=t.long)
 
-    def __len__(self):
-        return len(self.x)
+#     def __len__(self):
+#         return len(self.x)
 
-    def __getitem__(self, i):
-        return {"x": self.x[i], "labels": self.labels[i]}
-
-
-class TransformerForHF(transformers.Transformer):
-    def forward(self, x, labels=None):
-        logits = super().forward(x)[:, -1]
-        out = {"logits": logits}
-        if labels is not None:
-            out["loss"] = helpers.cross_entropy_high_precision(logits, labels)
-        return out
+#     def __getitem__(self, index):
+#         return {"x": self.x[index], "labels": self.labels[index]}
 
 
-train_pairs, test_pairs = transformers.gen_train_test(config)
-train_ds = ModularAdditionDataset(train_pairs, config.fn)
-test_ds = ModularAdditionDataset(test_pairs, config.fn)
+# class TransformerForHF(transformer.Transformer):
+#     def forward(self, x, labels=None):
+#         logits = super().forward(x)[:, -1]
+#         out = {"logits": logits}
+#         if labels is not None:
+#             out["loss"] = helpers.cross_entropy_high_precision(logits, labels)
+#         return out
 
-hf_args = TrainingArguments(
-    output_dir="./hf_runs",
-    num_train_epochs=config.num_epochs,
-    per_device_train_batch_size=len(train_ds),
-    per_device_eval_batch_size=len(test_ds),
-    learning_rate=config.lr,
-    weight_decay=config.weight_decay,
-    adam_beta1=0.9,
-    adam_beta2=0.98,
-    lr_scheduler_type="constant_with_warmup",
-    warmup_steps=10,
-    logging_steps=100,
-    eval_strategy="steps",
-    eval_steps=100,
-    save_strategy="no",
-    report_to="wandb",
-    run_name=f"grok_hf_{int(time.time())}",
-)
 
-hf_trainer = HFTrainer(
-    model=TransformerForHF(config, use_cache=False).to(config.device),
-    args=hf_args,
-    train_dataset=train_ds,
-    eval_dataset=test_ds,
-)
-hf_trainer.train()
+# train_pairs, test_pairs = transformer.gen_train_test(config)
+# train_ds = ModularAdditionDataset(train_pairs, config.fn)
+# test_ds = ModularAdditionDataset(test_pairs, config.fn)
+
+# hf_args = TrainingArguments(
+#     output_dir="./hf_runs",
+#     num_train_epochs=config.num_epochs,
+#     per_device_train_batch_size=len(train_ds),
+#     per_device_eval_batch_size=len(test_ds),
+#     learning_rate=config.lr,
+#     weight_decay=config.weight_decay,
+#     adam_beta1=0.9,
+#     adam_beta2=0.98,
+#     lr_scheduler_type="constant_with_warmup",
+#     warmup_steps=10,
+#     logging_steps=100,
+#     eval_strategy="steps",
+#     eval_steps=100,
+#     save_strategy="no",
+#     report_to="wandb",
+#     run_name=f"grok_hf_{int(time.time())}",
+# )
+
+# hf_trainer = HFTrainer(
+#     model=TransformerForHF(config, use_cache=False).to(config.device),
+#     args=hf_args,
+#     train_dataset=train_ds,
+#     eval_dataset=test_ds,
+# )
+# hf_trainer.train()
+
+# # %%
+
+
+# %% PUSH TO HF (optional)
+# Uncomment the bottom line to push. Requires `huggingface-cli login` (or HF_TOKEN
+# env var) once on this machine. transformer.Transformer isn't a PreTrainedModel,
+# so model.push_to_hub doesn't apply — we upload the raw state_dict file directly.
+def push_to_hf(repo_id: str, run_name: str | None = None):
+    from huggingface_hub import HfApi
+    name = run_name or trainer.run_name
+    final_path = helpers.root / name / "final.pth"
+    HfApi().upload_file(
+        path_or_fileobj=str(final_path),
+        path_in_repo="final.pth",
+        repo_id=repo_id,
+        repo_type="model",
+    )
+    print(f"Uploaded {final_path} → https://huggingface.co/{repo_id}")
+
+
+# push_to_hf("kaushikreddyxyz/grok-modular-addition")
 
 # %%
-##
