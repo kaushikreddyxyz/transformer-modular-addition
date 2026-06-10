@@ -30,6 +30,10 @@ from modular_addition.oracle.inject import OracleTransformer
 
 WANDB_PROJECT = os.environ.get("WANDB_PROJECT", "oracle-encodings")
 
+# "Model after N epochs of training" — saved when epoch+1 == N, so 30000 is the
+# fully-trained model under the default num_epochs=30_000.
+CKPT_EPOCHS = (10, 100, 1000, 5000, 7500, 10_000, 15_000, 25_000, 30_000)
+
 
 # --------------------------------------------------------------------------- #
 # Data / model setup
@@ -108,7 +112,8 @@ def train(config: transformer.Config, model, data, *, num_epochs,
           eval_every=100, snapshot_every=2000, snapshot_fn=None,
           inject_from_epoch=0, run_dir=None, label="run",
           grok_acc=0.99, stop_after_grok=None, verbose=True,
-          use_wandb=True, wandb_group=None, wandb_config=None):
+          use_wandb=True, wandb_group=None, wandb_config=None,
+          ckpt_epochs=CKPT_EPOCHS):
     """Train `model` full-batch; log scalars every `eval_every`, heavy uptake
     metrics every `snapshot_every` (via `snapshot_fn(model, epoch)`).
 
@@ -118,6 +123,9 @@ def train(config: transformer.Config, model, data, *, num_epochs,
     Scalars go to wandb (`step=epoch`, so charts populate live) and to JSONL;
     `wandb_group` should be the experiment name, `wandb_config` any sweep axes
     (n, seed, amp, ...) you want filterable in the wandb UI.
+    Checkpoints (trainable weights only — the oracle is frozen and re-creatable
+    from the run spec) land in `{run_dir}/checkpoints/{label}/ep{N:06d}.pth`
+    after N epochs of training, for N in `ckpt_epochs` (None/() disables).
     Returns dict(history, snapshots, grok_epoch, label, config).
     """
     opt = optim.AdamW(model.parameters(), lr=config.lr,
@@ -135,6 +143,7 @@ def train(config: transformer.Config, model, data, *, num_epochs,
                        inject_from_epoch=inject_from_epoch, num_epochs=num_epochs)
 
     has_oracle = getattr(model, "oracle_fn", None) is not None
+    ckpt_set = set(ckpt_epochs or ())
     t0 = time.time()
     try:
         for epoch in range(num_epochs):
@@ -147,6 +156,10 @@ def train(config: transformer.Config, model, data, *, num_epochs,
             opt.step()
             sched.step()
             opt.zero_grad()
+
+            if run_dir is not None and (epoch + 1) in ckpt_set:
+                save_checkpoint(model, config, run_dir, label, epoch + 1,
+                                inject_from_epoch=inject_from_epoch)
 
             final_epoch = epoch == num_epochs - 1
             stopping = (stop_after_grok is not None and grok_epoch is not None
@@ -195,6 +208,16 @@ def train(config: transformer.Config, model, data, *, num_epochs,
     if verbose:
         print(f"[{label}] done in {result['wall_s']}s  grok_epoch={grok_epoch}")
     return result
+
+
+def save_checkpoint(model, config, run_dir, label, epochs_done, **meta):
+    """Save trainable weights + config + metadata after `epochs_done` epochs."""
+    d = os.path.join(run_dir, "checkpoints", label)
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, f"ep{epochs_done:06d}.pth")
+    t.save(dict(model=model.state_dict(), epochs_done=epochs_done, label=label,
+                config=_config_dict(config), **meta), path)
+    return path
 
 
 def _snapshot_scalars(snap):

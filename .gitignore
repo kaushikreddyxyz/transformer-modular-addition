@@ -11,4 +11,8 @@ hf_runs/
 # local Trainer checkpoints (helpers.root = ./saved_runs)
 saved_runs/
 
+# oracle harness checkpoints — pushed to HuggingFace, not git
+oracle/results/**/checkpoints/
+oracle/results/**/*.pth
+
 .DS_Store
