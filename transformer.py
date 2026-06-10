@@ -17,8 +17,21 @@ import einops
 import random 
 from . import helpers
 from dataclasses import dataclass
+from functools import lru_cache
 import os
 import wandb
+
+
+@lru_cache(maxsize=None)
+def _random_answer_table(seed: int, p: int):
+    """Fixed random answer table for fn_name='rand', memoized per (seed, p).
+
+    Built from a *local* RandomState so it's identical on every access and across
+    runs with the same seed. The previous Config.random_answers used global
+    np.random and rebuilt a different table on every lookup, which broke both
+    determinism and correctness (the label for (x, y) changed each time it was read).
+    """
+    return np.random.RandomState(seed).randint(low=0, high=p, size=(p, p))
 
 # %% ../transformer.ipynb 4
 # TODO does dataclass really require type annotations lol
@@ -67,7 +80,7 @@ class Config():
 
     @property
     def random_answers(self):
-        return np.random.randint(low=0, high=self.p, size=(self.p, self.p))
+        return _random_answer_table(self.seed, self.p)
 
     @property 
     def fns_dict(self):
@@ -590,7 +603,7 @@ class Trainer:
                     labels=labels),
                 'coefficients': calculate_coefficients(p = self.config.p, logits = logits, fourier_basis = fourier_basis, key_freqs = key_freqs, device = self.config.device),
             }
-            wandb.log(metrics)
+            wandb.log(metrics, step=epoch)
             print("Logged metrics to wandb")
             self.metrics_dictionary[epoch].update(metrics)
 

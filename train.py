@@ -1,10 +1,10 @@
+# %% DETERMINISM
 # Must be set BEFORE any torch import so it's in place when cuBLAS initializes.
 # No effect on CPU/MPS; required for CUDA determinism with deterministic algorithms.
 import os
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
 # %% IMPORTS
-from wandb.docker import push
 import dataclasses
 import time
 
@@ -40,11 +40,12 @@ helpers.set_seed(config.seed)
 trainer = transformer.Trainer(config)
 trainer.initial_save_if_appropriate()
 
-# Chart all metrics against the logged `epoch` field rather than wandb's internal
-# step counter — this lets the per-epoch loss log and Trainer.take_metrics' periodic
-# log coexist on the same x-axis without step-monotonicity coordination.
-wandb.define_metric("epoch")
-wandb.define_metric("*", step_metric="epoch")
+# Use `epoch` as wandb's native step: every wandb.log below passes step=epoch.
+# This makes the default "Step" x-axis identical to epoch, so charts populate
+# LIVE during the run — unlike a define_metric custom step axis, which the UI only
+# materializes reliably once the run finishes. Multiple logs at the same step (this
+# loop + Trainer.take_metrics) merge into one history row; wandb commits a step when
+# the next, higher step is logged (and wandb.finish() flushes the final one).
 
 pbar = tqdm(range(config.num_epochs), desc="grokking-local", miniters=500, mininterval=0)
 for epoch in pbar:
@@ -59,7 +60,7 @@ for epoch in pbar:
         "test_accuracy": trainer.test_accuracies[-1],
         "lr": trainer.scheduler.get_last_lr()[0],
         "weight_l2": sum(p.detach().pow(2).sum().item() for p in trainer.model.parameters()) ** 0.5,
-    })
+    }, step=epoch)
     if epoch % config.take_metrics_every_n_epochs == 0:
         trainer.take_metrics(trainer.train, epoch)
     pbar.set_postfix(train=f"{train_loss.item():.4f}", test=f"{test_loss.item():.4f}")
@@ -170,5 +171,5 @@ def push_to_hf(repo_name: str | None = None, run_name: str = trainer.run_name, f
     )
     print(f"Uploaded {final_path} → https://huggingface.co/{repo_name}")
 
-# push_to_hf()
-
+push_to_hf()
+# %%
