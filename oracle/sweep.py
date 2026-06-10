@@ -28,11 +28,25 @@ EVAL_EVERY = 200
 SNAPSHOT_EVERY = 2000
 AMP_DEFAULT = 1.0
 
-# Fresh sweep output lands here (created on first run); pre-sweep results were
-# archived to results_legacy/. Override with ORACLE_RESULTS_DIR (e.g. scratch
-# disk on a rented GPU box) — make_figures and push_to_hf follow it too.
-RESULTS_DIR = Path(os.environ.get("ORACLE_RESULTS_DIR")
-                   or Path(__file__).resolve().parent / "results")
+def _default_results_dir():
+    """Where results live, in priority order:
+
+    1. ORACLE_RESULTS_DIR env (the runner sets this to its timestamped
+       results/run_<ts>/ dir; also useful for scratch disks),
+    2. results/latest — symlink to the most recent runner invocation, so
+       summary cells / make_figures executed after a sweep read (and skip
+       into) THAT run instead of starting a fresh one,
+    3. plain oracle/results/ (no runner has executed yet).
+    """
+    env = os.environ.get("ORACLE_RESULTS_DIR")
+    if env:
+        return Path(env)
+    base = Path(__file__).resolve().parent / "results"
+    latest = base / "latest"
+    return latest.resolve() if latest.exists() else base
+
+
+RESULTS_DIR = _default_results_dir()
 
 # Canonical p=113 frequency pool. Prefixes are nested (n=2 ⊂ n=3 ⊂ ...) so the
 # n-sweep compares supersets; the first two are exp01's historical [17, 34].

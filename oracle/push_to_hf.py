@@ -1,18 +1,24 @@
 """Accumulate oracle checkpoints/results and push them to HuggingFace.
 
-Walks an entry-point directory (default: oracle/results), collects model
-checkpoints (*.pth) plus the small JSON files needed to interpret them
-(*.result.json, summary.json), and uploads everything to ONE HuggingFace model
-repo, mirroring the on-disk relative paths, e.g.:
+Walks an entry-point directory (default: oracle/results — i.e. EVERY
+timestamped runner invocation under it), collects model checkpoints (*.pth)
+plus the small JSON files needed to interpret them (*.result.json,
+summary.json), and uploads everything to ONE HuggingFace model repo,
+mirroring the on-disk relative paths, e.g.:
 
-    exp01/checkpoints/n2_s0/ep030000.pth
-    exp01/n2_s0.result.json
-    exp06/summary.json
+    run_20260612_093011/exp01/checkpoints/n2_s0/ep030000.pth
+    run_20260612_093011/exp01/n2_s0.result.json
+    run_20260612_093011/exp06/summary.json
+
+(`--root <one run dir>` pushes a single run; its run_<ts>/ prefix is kept so
+repo paths never collide across runs. Symlinks like results/latest are
+skipped, so nothing uploads twice.)
 
 The repo's own file listing is the "already pushed" manifest — anything whose
 path already exists in the repo is skipped (no local state to lose; --force
 re-uploads). So the loop is: train → `python -m modular_addition.oracle.push_to_hf`
-→ only new checkpoints move.
+→ only new checkpoints move. Run it after every sweep; dozens of runs
+accumulate side by side.
 
 Requires a HuggingFace login (`hf auth login`, or HF_TOKEN in the env).
 
@@ -33,8 +39,9 @@ except NameError:
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-# Same resolution as sweep.RESULTS_DIR (duplicated here so this script stays
-# importable without torch): fresh sweep output, overridable via env.
+# Default = the results BASE (all timestamped runs accumulate), not the
+# `latest` run: pushing is an archival operation. ORACLE_RESULTS_DIR (e.g.
+# scratch disk) takes precedence. Torch-free on purpose.
 DEFAULT_ROOT = Path(os.environ.get("ORACLE_RESULTS_DIR")
                     or Path(__file__).resolve().parent / "results")
 DEFAULT_REPO_NAME = "oracle-encodings-checkpoints"
@@ -54,9 +61,10 @@ Model checkpoints from the oracle-encodings modular-addition experiments
 (frozen "oracle" Fourier features injected into the residual stream of a
 1-layer transformer grokking (i + j) mod p).
 
-Layout: `<experiment>/checkpoints/<label>/ep<NNNNNN>.pth`, where the label
-encodes the sweep axes (e.g. `n2_s0` = 2 injected frequency pairs, seed 0;
-`delay4000_n2_s1`, `amp2_n3_s0`, `rel0.5_n2_s2`, ...). Each .pth holds
+Layout: `run_<timestamp>/<experiment>/checkpoints/<label>/ep<NNNNNN>.pth` —
+one `run_<ts>/` tree per runner invocation; the label encodes the sweep axes
+(e.g. `n2_s0` = 2 injected frequency pairs, seed 0; `delay4000_n2_s1`,
+`amp2_n3_s0`, `rel0.5_n2_s2`, ...). Each .pth holds
 `{model: state_dict, config: Config fields, label, epochs_done}` — the frozen
 oracle is NOT in the state_dict; rebuild it from the run spec embedded in the
 sibling `<experiment>/<label>.result.json`
@@ -73,16 +81,25 @@ def wanted(path: Path) -> bool:
 
 
 def collect(root: Path):
-    """BFS from the entry point; returns [(abs_path, path_in_repo)]."""
+    """BFS from the entry point; returns [(abs_path, path_in_repo)].
+
+    Symlinks (results/latest) are skipped to avoid duplicate uploads. When the
+    root itself is one timestamped run dir, its run_<ts>/ name is kept as the
+    repo path prefix so single-run pushes line up with whole-base pushes.
+    """
+    prefix = root.name if root.name.startswith("run_") else ""
     queue, found = [root], []
     while queue:
         d = queue.pop(0)
         for child in sorted(d.iterdir()):
+            if child.is_symlink():
+                continue
             if child.is_dir():
                 if child.name not in EXCLUDE_DIRS:
                     queue.append(child)
             elif wanted(child):
-                found.append((child, child.relative_to(root).as_posix()))
+                rel = child.relative_to(root).as_posix()
+                found.append((child, f"{prefix}/{rel}" if prefix else rel))
     return found
 
 

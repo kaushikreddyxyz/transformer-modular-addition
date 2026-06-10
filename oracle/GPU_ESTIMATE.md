@@ -60,16 +60,25 @@ CPU matters: each worker burns ~1–2 cores on Python/launch overhead
 
 ## Output & progress
 
-Everything a sweep produces lands in one fresh directory,
-`modular_addition/oracle/results/` (created on first run; the pre-sweep
-single-seed data is archived in `results_legacy/`): per-run JSONL +
-result.json, `checkpoints/<label>/*.pth`, per-experiment `summary.json`, and
-`figures/` once make_figures runs. Set `ORACLE_RESULTS_DIR=/scratch/...` to
-redirect all of it (runner, figures, and push_to_hf follow the same variable).
+Every runner invocation creates its own
+`modular_addition/oracle/results/run_<YYYYmmdd_HHMMSS>/` containing everything
+that invocation produced: per-run JSONL + result.json, `checkpoints/`,
+per-experiment `summary.json`, and `figures/` once make_figures runs. A
+`results/latest` symlink always points at the newest run — summary cells,
+make_figures, and any sweep code follow it automatically, so "train → summarize
+→ plot" needs no path plumbing. Run the runner dozens of times; each run is
+its own folder. Use `--results-dir results/run_<ts>` to resume/extend a
+previous run (skip-if-done and the exp01↔exp02 cross-references are
+per-directory), and `ORACLE_RESULTS_DIR=/scratch/...` to redirect entirely.
+Pre-sweep single-seed data is archived in `results_legacy/`. push_to_hf
+defaults to the whole `results/` base, so all stamped runs accumulate in the
+HF repo under their `run_<ts>/` prefixes (already-pushed files are skipped).
 
-Progress: the runner shows a tqdm bar over all runs (ETA, ok/fail counts) plus
-one completion line per run; per-epoch bars appear in sequential/verbose mode
-(experiment files run directly). wandb charts update live per run either way.
+Progress: the runner prints the model count per experiment up front, then a
+tqdm bar over all models (ETA + trained/skipped/failed counts) with one
+completion line per model — equally informative for 1 model or 356. Per-epoch
+bars appear in sequential/verbose mode (experiment files run directly). wandb
+charts update live per run either way.
 
 ## Other resources
 
