@@ -24,7 +24,7 @@ from modular_addition import transformer
 from modular_addition.oracle import inject, analysis, harness
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
-NUM_EPOCHS = 22_000
+NUM_EPOCHS = 30_000
 BASE_FREQ = 17
 AMP = 1.0
 RELIABILITIES = [1.0, 0.75, 0.5, 0.25, 0.0]
@@ -43,8 +43,7 @@ for rel in RELIABILITIES:
     snap_fn = lambda model, epoch: analysis.uptake_snapshot(
         model, cfg, ctx, injected_freqs=[BASE_FREQ], data=d)
     res = harness.train(cfg, m, d, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=1000,
-                        snapshot_fn=snap_fn, run_dir=RUN_DIR, label=f"rel{rel}",
-                        stop_after_grok=2000)
+                        snapshot_fn=snap_fn, run_dir=RUN_DIR, label=f"rel{rel}")
     s = res["snapshots"][-1]
     abl = s.get("ablation_test") or {}
     # W_E power on base freq vs the strongest "other" frequency

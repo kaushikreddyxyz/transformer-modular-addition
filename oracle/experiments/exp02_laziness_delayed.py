@@ -24,7 +24,7 @@ from modular_addition import transformer
 from modular_addition.oracle import inject, analysis, harness
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
-NUM_EPOCHS = 16_000
+NUM_EPOCHS = 30_000
 FREQS = [17, 34]
 RUN_DIR = f"{_root}/modular_addition/oracle/results/exp02"
 os.makedirs(RUN_DIR, exist_ok=True)
@@ -53,8 +53,7 @@ for amp in [0.5, 1.0, 2.0, 4.0]:
     orc = inject.make_fourier_oracle(cfg, FREQS, amp=amp)
     m, d = harness.setup(cfg, oracle_fn=orc)
     res = harness.train(cfg, m, d, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=1000,
-                        snapshot_fn=snap_fn(d), run_dir=RUN_DIR, label=f"amp{amp}",
-                        stop_after_grok=1500)
+                        snapshot_fn=snap_fn(d), run_dir=RUN_DIR, label=f"amp{amp}")
     records[f"amp{amp}"] = rec_of(res)
     print("AMP", amp, records[f"amp{amp}"])
 
@@ -64,7 +63,7 @@ for T in [4000, 8000]:
     m, d = harness.setup(cfg, oracle_fn=orc)
     res = harness.train(cfg, m, d, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=500,
                         snapshot_fn=snap_fn(d), run_dir=RUN_DIR, label=f"delay{T}",
-                        inject_from_epoch=T, stop_after_grok=1500)
+                        inject_from_epoch=T)
     # W_E power at injected freqs just-before vs just-after injection turns on
     snaps = res["snapshots"]
     before = next((s for s in reversed(snaps) if s["epoch"] < T), None)

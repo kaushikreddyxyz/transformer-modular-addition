@@ -23,7 +23,7 @@ from modular_addition import transformer
 from modular_addition.oracle import inject, analysis, harness
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
-NUM_EPOCHS = 25_000
+NUM_EPOCHS = 30_000
 RUN_DIR = f"{_root}/modular_addition/oracle/results/exp05"
 os.makedirs(RUN_DIR, exist_ok=True)
 cfg = dataclasses.replace(transformer.Config(), device=device, num_epochs=NUM_EPOCHS, save_models=False)
@@ -45,7 +45,7 @@ records = {}
 for name, orc in CONFIGS:
     m, d = harness.setup(cfg, oracle_fn=orc)
     res = harness.train(cfg, m, d, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=1000,
-                        snapshot_fn=snap_fn(d), run_dir=RUN_DIR, label=name, stop_after_grok=2500)
+                        snapshot_fn=snap_fn(d), run_dir=RUN_DIR, label=name)
     s = res["snapshots"][-1]
     abl = s.get("ablation_test") or {}
     rec = dict(name=name, grok_epoch=res["grok_epoch"],

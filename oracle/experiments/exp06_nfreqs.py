@@ -52,7 +52,7 @@ records = {}
 mb, db = harness.setup(cfg, oracle_fn=None)
 rb = harness.train(cfg, mb, db, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=2000,
                    snapshot_fn=lambda m, e: analysis.uptake_snapshot(m, cfg, ctx, injected_freqs=[], data=db),
-                   run_dir=RUN_DIR, label="nfreq0_baseline", stop_after_grok=1000)
+                   run_dir=RUN_DIR, label="nfreq0_baseline")
 records["0"] = rec_of(rb, [])
 print("N=0", records["0"])
 
@@ -64,7 +64,7 @@ for n in N_LIST:
     snap_fn = lambda model, epoch, _f=freqs, _d=d: analysis.uptake_snapshot(
         model, cfg, ctx, injected_freqs=_f, data=_d)
     res = harness.train(cfg, m, d, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=2000,
-                        snapshot_fn=snap_fn, run_dir=RUN_DIR, label=f"nfreq{n}", stop_after_grok=1000)
+                        snapshot_fn=snap_fn, run_dir=RUN_DIR, label=f"nfreq{n}")
     records[str(n)] = rec_of(res, freqs)
     print(f"N={n}", records[str(n)])
 

@@ -24,7 +24,7 @@ from modular_addition import transformer
 from modular_addition.oracle import inject, analysis, harness
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
-NUM_EPOCHS = 25_000
+NUM_EPOCHS = 30_000
 FREQS = [17, 34]
 AMP = 1.0
 RUN_DIR = f"{_root}/modular_addition/oracle/results/exp01"

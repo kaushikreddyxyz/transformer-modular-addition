@@ -36,11 +36,11 @@ for seed in SEEDS:
     # baseline (no snapshots -> fast; stop shortly after grok)
     mb, db = harness.setup(cfg, oracle_fn=None)
     rb = harness.train(cfg, mb, db, num_epochs=30_000, eval_every=200, snapshot_every=10**9,
-                       run_dir=RUN_DIR, label=f"baseline_s{seed}", stop_after_grok=800)
+                       run_dir=RUN_DIR, label=f"baseline_s{seed}")
     # oracle
     mo, do = harness.setup(cfg, oracle_fn=inject.make_fourier_oracle(cfg, FREQS, amp=AMP))
     ro = harness.train(cfg, mo, do, num_epochs=30_000, eval_every=200, snapshot_every=10**9,
-                       run_dir=RUN_DIR, label=f"oracle_s{seed}", stop_after_grok=800)
+                       run_dir=RUN_DIR, label=f"oracle_s{seed}")
     row = dict(seed=seed, baseline_grok=rb["grok_epoch"], oracle_grok=ro["grok_epoch"])
     row["speedup"] = (rb["grok_epoch"] / ro["grok_epoch"]
                       if rb["grok_epoch"] and ro["grok_epoch"] else None)
