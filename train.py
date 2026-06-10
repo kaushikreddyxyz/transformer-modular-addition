@@ -1,3 +1,8 @@
+# Must be set BEFORE any torch import so it's in place when cuBLAS initializes.
+# No effect on CPU/MPS; required for CUDA determinism with deterministic algorithms.
+import os
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 # %% IMPORTS
 from wandb.docker import push
 import dataclasses
