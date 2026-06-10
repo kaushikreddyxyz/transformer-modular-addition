@@ -1,0 +1,159 @@
+{
+  "0": {
+    "n_inject": 0,
+    "freqs": [],
+    "grok_epoch": 9800,
+    "final_test_acc": 1.0,
+    "n_key_freqs": 5,
+    "key_freqs": [
+      14,
+      35,
+      41,
+      42,
+      52
+    ],
+    "injected_in_key": [],
+    "ablation_delta": null,
+    "we_total_norm": 15.355,
+    "we_power_injected": 0.0
+  },
+  "1": {
+    "n_inject": 1,
+    "freqs": [
+      17
+    ],
+    "grok_epoch": null,
+    "final_test_acc": 0.9786,
+    "n_key_freqs": 5,
+    "key_freqs": [
+      13,
+      17,
+      26,
+      34,
+      48
+    ],
+    "injected_in_key": [
+      17
+    ],
+    "ablation_delta": 1.6873,
+    "we_total_norm": 13.384,
+    "we_power_injected": 60.165
+  },
+  "2": {
+    "n_inject": 2,
+    "freqs": [
+      17,
+      34
+    ],
+    "grok_epoch": null,
+    "final_test_acc": 0.9638,
+    "n_key_freqs": 5,
+    "key_freqs": [
+      9,
+      17,
+      25,
+      34,
+      54
+    ],
+    "injected_in_key": [
+      17,
+      34
+    ],
+    "ablation_delta": 5.6998,
+    "we_total_norm": 12.789,
+    "we_power_injected": 61.867
+  },
+  "3": {
+    "n_inject": 3,
+    "freqs": [
+      17,
+      34,
+      9
+    ],
+    "grok_epoch": 400,
+    "final_test_acc": 1.0,
+    "n_key_freqs": 3,
+    "key_freqs": [
+      9,
+      17,
+      34
+    ],
+    "injected_in_key": [
+      17,
+      34,
+      9
+    ],
+    "ablation_delta": 1.2681,
+    "we_total_norm": 10.298,
+    "we_power_injected": 88.703
+  },
+  "5": {
+    "n_inject": 5,
+    "freqs": [
+      17,
+      34,
+      9,
+      25,
+      43
+    ],
+    "grok_epoch": 400,
+    "final_test_acc": 1.0,
+    "n_key_freqs": 5,
+    "key_freqs": [
+      9,
+      17,
+      25,
+      34,
+      43
+    ],
+    "injected_in_key": [
+      17,
+      34,
+      9,
+      25,
+      43
+    ],
+    "ablation_delta": 0.7712,
+    "we_total_norm": 9.501,
+    "we_power_injected": 74.02
+  },
+  "8": {
+    "n_inject": 8,
+    "freqs": [
+      17,
+      34,
+      9,
+      25,
+      43,
+      50,
+      13,
+      47
+    ],
+    "grok_epoch": 400,
+    "final_test_acc": 1.0,
+    "n_key_freqs": 8,
+    "key_freqs": [
+      9,
+      13,
+      17,
+      25,
+      34,
+      43,
+      47,
+      50
+    ],
+    "injected_in_key": [
+      17,
+      34,
+      9,
+      25,
+      43,
+      50,
+      13,
+      47
+    ],
+    "ablation_delta": 1.152,
+    "we_total_norm": 9.681,
+    "we_power_injected": 73.505
+  }
+}

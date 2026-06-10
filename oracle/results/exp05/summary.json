@@ -1,0 +1,67 @@
+{
+  "baseline": {
+    "name": "baseline",
+    "grok_epoch": 9800,
+    "final_test_acc": 1.0,
+    "n_key_freqs": 5,
+    "key_freqs": [
+      14,
+      35,
+      41,
+      42,
+      52
+    ],
+    "we_total_norm": 14.545,
+    "ablation_delta": null
+  },
+  "hint_mod10_onehot": {
+    "name": "hint_mod10_onehot",
+    "grok_epoch": 19200,
+    "final_test_acc": 1.0,
+    "n_key_freqs": 6,
+    "key_freqs": [
+      11,
+      23,
+      30,
+      34,
+      45,
+      55
+    ],
+    "we_total_norm": 15.337,
+    "ablation_delta": 2.3086
+  },
+  "hint_div10_onehot": {
+    "name": "hint_div10_onehot",
+    "grok_epoch": 11200,
+    "final_test_acc": 1.0,
+    "n_key_freqs": 10,
+    "key_freqs": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      12,
+      24,
+      25,
+      55
+    ],
+    "we_total_norm": 13.634,
+    "ablation_delta": 0.9394
+  },
+  "hint_mod10_fourier": {
+    "name": "hint_mod10_fourier",
+    "grok_epoch": 12600,
+    "final_test_acc": 0.9975,
+    "n_key_freqs": 4,
+    "key_freqs": [
+      11,
+      17,
+      25,
+      42
+    ],
+    "we_total_norm": 12.488,
+    "ablation_delta": 3.0061
+  }
+}

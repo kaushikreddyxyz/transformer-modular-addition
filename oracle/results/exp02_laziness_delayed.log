@@ -1,0 +1,70 @@
+[amp0.5] ep      0  train 4.7652/0.009  test 4.7701/0.009  |W_E| 10.70  inj=True
+[amp0.5] ep   2000  train 0.1489/0.984  test 3.4565/0.368  |W_E| 21.37  inj=True
+[amp0.5] ep   4000  train 0.0748/1.000  test 2.7977/0.426  |W_E| 21.30  inj=True
+[amp0.5] ep   6000  train 0.0032/1.000  test 0.0051/1.000  |W_E| 16.27  inj=True
+[amp0.5] ep   6700  train 0.0000/1.000  test 0.0000/1.000  |W_E| 16.72  inj=True
+[amp0.5] done in 337.53s  grok_epoch=5200
+AMP 0.5 {'label': 'amp0.5', 'grok_epoch': 5200, 'we_total_norm': 16.719, 'we_gini': 0.943, 'we_power_injected': 212.228, 'key_freqs': [17, 34, 49], 'injected_in_key': [17, 34], 'ablation_delta': 0.0006, 'final_test_acc': 1.0}
+[amp1.0] ep      0  train 4.7702/0.009  test 4.7751/0.009  |W_E| 10.70  inj=True
+[amp1.0] ep   2000  train 0.1907/0.985  test 2.2042/0.445  |W_E| 21.59  inj=True
+[amp1.0] ep   4000  train 0.1066/1.000  test 2.2580/0.467  |W_E| 20.97  inj=True
+[amp1.0] ep   6000  train 0.0770/1.000  test 2.3661/0.478  |W_E| 19.84  inj=True
+[amp1.0] ep   8000  train 0.0761/1.000  test 2.4962/0.485  |W_E| 19.62  inj=True
+[amp1.0] ep  10000  train 0.0302/1.000  test 2.2104/0.543  |W_E| 19.78  inj=True
+[amp1.0] ep  12000  train 0.0502/1.000  test 1.9208/0.581  |W_E| 19.37  inj=True
+[amp1.0] ep  14000  train 0.0343/1.000  test 0.9493/0.753  |W_E| 19.30  inj=True
+[amp1.0] ep  15999  train 0.0237/1.000  test 0.3780/0.894  |W_E| 18.01  inj=True
+[amp1.0] done in 773.68s  grok_epoch=None
+AMP 1.0 {'label': 'amp1.0', 'grok_epoch': None, 'we_total_norm': 18.008, 'we_gini': 0.86, 'we_power_injected': 194.902, 'key_freqs': [17, 25, 34, 42], 'injected_in_key': [17, 34], 'ablation_delta': 1.5112, 'final_test_acc': 0.8938}
+[amp2.0] ep      0  train 4.7899/0.007  test 4.7939/0.007  |W_E| 10.70  inj=True
+[amp2.0] ep   2000  train 0.2611/0.960  test 2.1478/0.434  |W_E| 23.87  inj=True
+[amp2.0] ep   4000  train 0.1217/1.000  test 2.3964/0.453  |W_E| 22.95  inj=True
+[amp2.0] ep   6000  train 0.0917/1.000  test 2.5457/0.455  |W_E| 20.58  inj=True
+[amp2.0] ep   8000  train 0.0833/1.000  test 2.4949/0.468  |W_E| 19.75  inj=True
+[amp2.0] ep  10000  train 0.0529/1.000  test 2.5706/0.487  |W_E| 20.32  inj=True
+[amp2.0] ep  12000  train 0.0437/1.000  test 2.5924/0.493  |W_E| 20.43  inj=True
+[amp2.0] ep  14000  train 0.0512/1.000  test 2.3756/0.510  |W_E| 19.46  inj=True
+[amp2.0] ep  15999  train 0.0189/1.000  test 2.1461/0.595  |W_E| 19.87  inj=True
+[amp2.0] done in 789.17s  grok_epoch=None
+AMP 2.0 {'label': 'amp2.0', 'grok_epoch': None, 'we_total_norm': 19.875, 'we_gini': 0.753, 'we_power_injected': 244.207, 'key_freqs': [17, 31, 34], 'injected_in_key': [17, 34], 'ablation_delta': 1.0278, 'final_test_acc': 0.5949}
+[amp4.0] ep      0  train 4.8647/0.005  test 4.8665/0.005  |W_E| 10.70  inj=True
+[amp4.0] ep   2000  train 0.1924/0.998  test 2.5198/0.389  |W_E| 23.90  inj=True
+[amp4.0] ep   4000  train 0.2023/0.980  test 3.2341/0.354  |W_E| 22.92  inj=True
+[amp4.0] ep   6000  train 0.0980/1.000  test 3.2901/0.377  |W_E| 21.29  inj=True
+[amp4.0] ep   8000  train 0.3705/0.867  test 4.1895/0.337  |W_E| 21.18  inj=True
+[amp4.0] ep  10000  train 0.0408/1.000  test 3.4782/0.410  |W_E| 20.67  inj=True
+[amp4.0] ep  12000  train 0.0581/1.000  test 3.1581/0.420  |W_E| 19.88  inj=True
+[amp4.0] ep  14000  train 0.0296/1.000  test 3.4491/0.432  |W_E| 20.06  inj=True
+[amp4.0] ep  15999  train 0.0435/1.000  test 3.1641/0.440  |W_E| 19.34  inj=True
+[amp4.0] done in 777.76s  grok_epoch=None
+AMP 4.0 {'label': 'amp4.0', 'grok_epoch': None, 'we_total_norm': 19.338, 'we_gini': 0.631, 'we_power_injected': 189.466, 'key_freqs': [17, 34], 'injected_in_key': [17, 34], 'ablation_delta': 1.4718, 'final_test_acc': 0.4399}
+[delay4000] ep      0  train 4.7641/0.009  test 4.7683/0.009  |W_E| 10.70  inj=False
+[delay4000] ep   2000  train 0.0031/1.000  test 12.7111/0.082  |W_E| 19.34  inj=False
+[delay4000] ep   4000  train 0.6391/0.804  test 15.0487/0.065  |W_E| 24.90  inj=True
+[delay4000] ep   6000  train 0.0007/1.000  test 10.2170/0.148  |W_E| 23.71  inj=True
+[delay4000] ep   8000  train 0.0000/1.000  test 5.5610/0.405  |W_E| 24.08  inj=True
+[delay4000] ep  10000  train 0.0001/1.000  test 0.0056/0.999  |W_E| 16.56  inj=True
+[delay4000] ep  10900  train 0.0000/1.000  test 0.0001/1.000  |W_E| 15.87  inj=True
+[delay4000] done in 588.66s  grok_epoch=9400
+DELAY 4000 {'label': 'delay4000', 'grok_epoch': 9400, 'we_total_norm': 15.872, 'we_gini': 0.818, 'we_power_injected': 1.457, 'key_freqs': [9, 14, 29, 34, 35, 41, 42, 52], 'injected_in_key': [34], 'ablation_delta': 0.0001, 'final_test_acc': 1.0, 'we_power_injected_before_T': 16.825, 'we_power_injected_after_T': 18.201, 'key_freqs_before_T': [1, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 19, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 41, 42, 44, 48, 49, 50, 52, 55]}
+[delay8000] ep      0  train 4.7641/0.009  test 4.7683/0.009  |W_E| 10.70  inj=False
+[delay8000] ep   2000  train 0.0031/1.000  test 12.7111/0.082  |W_E| 19.34  inj=False
+[delay8000] ep   4000  train 0.0007/1.000  test 13.4089/0.099  |W_E| 24.93  inj=False
+[delay8000] ep   6000  train 0.0000/1.000  test 16.5507/0.133  |W_E| 26.10  inj=False
+[delay8000] ep   8000  train 0.3130/0.902  test 7.1356/0.208  |W_E| 21.42  inj=True
+[delay8000] ep  10000  train 0.0000/1.000  test 0.0036/0.999  |W_E| 16.53  inj=True
+[delay8000] ep  11100  train 0.0000/1.000  test 0.0002/1.000  |W_E| 15.84  inj=True
+[delay8000] done in 485.89s  grok_epoch=9600
+DELAY 8000 {'label': 'delay8000', 'grok_epoch': 9600, 'we_total_norm': 15.843, 'we_gini': 0.822, 'we_power_injected': 1.133, 'key_freqs': [14, 29, 35, 41, 42, 52], 'injected_in_key': [], 'ablation_delta': 0.0001, 'final_test_acc': 1.0, 'we_power_injected_before_T': 15.515, 'we_power_injected_after_T': 10.975, 'key_freqs_before_T': [1, 5, 8, 14, 15, 16, 24, 25, 26, 27, 28, 30, 32, 34, 35, 37, 38, 41, 42, 48, 49, 50, 52, 55]}
+
+=== Exp B summary ===
+amplitude sweep (expect we_power_injected to DROP as amp rises if model goes lazy):
+  amp=0.5: |W_E|=16.719 we_power@inj=212.228 grok=5200 ablΔ=0.0006 key_freqs=[17, 34, 49]
+  amp=1.0: |W_E|=18.008 we_power@inj=194.902 grok=None ablΔ=1.5112 key_freqs=[17, 25, 34, 42]
+  amp=2.0: |W_E|=19.875 we_power@inj=244.207 grok=None ablΔ=1.0278 key_freqs=[17, 31, 34]
+  amp=4.0: |W_E|=19.338 we_power@inj=189.466 grok=None ablΔ=1.4718 key_freqs=[17, 34]
+delayed injection (does it adopt after T, and was pre-T structure abandoned?):
+  T=4000: grok=9400 injected_in_key=[34] we_power@inj before_T=16.825 after/end=1.457
+  T=8000: grok=9600 injected_in_key=[] we_power@inj before_T=15.515 after/end=1.133
+
+✅ exp02 done

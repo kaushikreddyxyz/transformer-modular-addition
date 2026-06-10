@@ -1,0 +1,56 @@
+[baseline] ep      0  train 4.7641/0.009  test 4.7683/0.009  |W_E| 10.70  inj=True
+[baseline] ep   2000  train 0.0031/1.000  test 12.7111/0.082  |W_E| 19.34  inj=True
+[baseline] ep   4000  train 0.0007/1.000  test 13.4089/0.099  |W_E| 24.93  inj=True
+[baseline] ep   6000  train 0.0000/1.000  test 16.5507/0.133  |W_E| 26.10  inj=True
+[baseline] ep   8000  train 0.0009/1.000  test 5.5036/0.306  |W_E| 21.41  inj=True
+[baseline] ep  10000  train 0.0000/1.000  test 0.0063/0.999  |W_E| 17.38  inj=True
+[baseline] ep  12000  train 0.0000/1.000  test 0.0010/1.000  |W_E| 15.11  inj=True
+[baseline] ep  12300  train 0.0001/1.000  test 0.0006/1.000  |W_E| 14.55  inj=True
+[baseline] done in 606.38s  grok_epoch=9800
+baseline {'name': 'baseline', 'grok_epoch': 9800, 'final_test_acc': 1.0, 'n_key_freqs': 5, 'key_freqs': [14, 35, 41, 42, 52], 'we_total_norm': 14.545, 'ablation_delta': None}
+[hint_mod10_onehot] ep      0  train 4.7702/0.008  test 4.7717/0.008  |W_E| 10.70  inj=True
+[hint_mod10_onehot] ep   2000  train 0.0007/1.000  test 17.9938/0.033  |W_E| 19.83  inj=True
+[hint_mod10_onehot] ep   4000  train 0.0000/1.000  test 26.3760/0.037  |W_E| 21.40  inj=True
+[hint_mod10_onehot] ep   6000  train 0.0012/1.000  test 14.5997/0.041  |W_E| 20.07  inj=True
+[hint_mod10_onehot] ep   8000  train 0.0000/1.000  test 22.2838/0.047  |W_E| 21.64  inj=True
+[hint_mod10_onehot] ep  10000  train 0.0033/1.000  test 12.4836/0.051  |W_E| 18.75  inj=True
+[hint_mod10_onehot] ep  12000  train 0.0000/1.000  test 20.2593/0.055  |W_E| 20.53  inj=True
+[hint_mod10_onehot] ep  14000  train 0.0086/1.000  test 9.2743/0.061  |W_E| 18.15  inj=True
+[hint_mod10_onehot] ep  16000  train 0.0001/1.000  test 14.1742/0.082  |W_E| 21.04  inj=True
+[hint_mod10_onehot] ep  18000  train 0.0000/1.000  test 12.3461/0.209  |W_E| 20.91  inj=True
+[hint_mod10_onehot] ep  20000  train 0.0002/1.000  test 0.0016/1.000  |W_E| 14.29  inj=True
+[hint_mod10_onehot] ep  21700  train 0.0000/1.000  test 0.0000/1.000  |W_E| 15.34  inj=True
+[hint_mod10_onehot] done in 1041.17s  grok_epoch=19200
+hint_mod10_onehot {'name': 'hint_mod10_onehot', 'grok_epoch': 19200, 'final_test_acc': 1.0, 'n_key_freqs': 6, 'key_freqs': [11, 23, 30, 34, 45, 55], 'we_total_norm': 15.337, 'ablation_delta': 2.3086}
+[hint_div10_onehot] ep      0  train 4.7798/0.013  test 4.7752/0.012  |W_E| 10.70  inj=True
+[hint_div10_onehot] ep   2000  train 0.0005/1.000  test 16.8830/0.060  |W_E| 18.96  inj=True
+[hint_div10_onehot] ep   4000  train 0.0000/1.000  test 26.9694/0.073  |W_E| 19.91  inj=True
+[hint_div10_onehot] ep   6000  train 0.0001/1.000  test 16.0706/0.094  |W_E| 19.24  inj=True
+[hint_div10_onehot] ep   8000  train 0.0000/1.000  test 18.7614/0.128  |W_E| 19.72  inj=True
+[hint_div10_onehot] ep  10000  train 0.0000/1.000  test 6.1258/0.424  |W_E| 18.43  inj=True
+[hint_div10_onehot] ep  12000  train 0.0038/1.000  test 0.0062/1.000  |W_E| 11.87  inj=True
+[hint_div10_onehot] ep  13700  train 0.0006/1.000  test 0.0013/1.000  |W_E| 13.63  inj=True
+[hint_div10_onehot] done in 680.76s  grok_epoch=11200
+hint_div10_onehot {'name': 'hint_div10_onehot', 'grok_epoch': 11200, 'final_test_acc': 1.0, 'n_key_freqs': 10, 'key_freqs': [1, 2, 3, 4, 5, 6, 12, 24, 25, 55], 'we_total_norm': 13.634, 'ablation_delta': 0.9394}
+[hint_mod10_fourier] ep      0  train 4.7786/0.009  test 4.7836/0.009  |W_E| 10.70  inj=True
+[hint_mod10_fourier] ep   2000  train 0.0330/1.000  test 9.9000/0.085  |W_E| 23.83  inj=True
+[hint_mod10_fourier] ep   4000  train 0.0016/1.000  test 13.1810/0.109  |W_E| 22.81  inj=True
+[hint_mod10_fourier] ep   6000  train 0.0124/1.000  test 8.4108/0.148  |W_E| 19.62  inj=True
+[hint_mod10_fourier] ep   8000  train 0.0038/1.000  test 6.9157/0.236  |W_E| 19.25  inj=True
+[hint_mod10_fourier] ep  10000  train 0.0049/1.000  test 2.0861/0.553  |W_E| 16.91  inj=True
+[hint_mod10_fourier] ep  12000  train 0.0000/1.000  test 0.0794/0.982  |W_E| 14.53  inj=True
+[hint_mod10_fourier] ep  14000  train 0.0000/1.000  test 0.0066/0.998  |W_E| 12.48  inj=True
+[hint_mod10_fourier] ep  15100  train 0.0008/1.000  test 0.0079/0.998  |W_E| 12.49  inj=True
+[hint_mod10_fourier] done in 682.29s  grok_epoch=12600
+hint_mod10_fourier {'name': 'hint_mod10_fourier', 'grok_epoch': 12600, 'final_test_acc': 0.9975, 'n_key_freqs': 4, 'key_freqs': [11, 17, 25, 42], 'we_total_norm': 12.488, 'ablation_delta': 3.0061}
+
+=== Exp E (answer hint) summary ===
+config | grok | testacc | #key_freqs | |W_E| | abl ΔCE
+  baseline             |  9800 | 1.000 |   5 | 14.545 | None
+  hint_mod10_onehot    | 19200 | 1.000 |   6 | 15.337 | 2.3086
+  hint_div10_onehot    | 11200 | 1.000 |  10 | 13.634 | 0.9394
+  hint_mod10_fourier   | 12600 | 0.998 |   4 | 12.488 | 3.0061
+
+Hypothesis: hinted models use FEWER key frequencies than baseline (5).
+
+✅ exp05 done

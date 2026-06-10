@@ -1,0 +1,42 @@
+Exp01 uptake | epochs=25000 freqs=[17, 34] amp=1.0 dir=/root/oracle-encodings/modular_addition/oracle/results/exp01
+[baseline] ep      0  train 4.7641/0.009  test 4.7683/0.009  |W_E| 10.70  inj=True
+[baseline] ep   2000  train 0.0031/1.000  test 12.7111/0.082  |W_E| 19.34  inj=True
+[baseline] ep   4000  train 0.0007/1.000  test 13.4089/0.099  |W_E| 24.93  inj=True
+[baseline] ep   6000  train 0.0000/1.000  test 16.5507/0.133  |W_E| 26.10  inj=True
+[baseline] ep   8000  train 0.0009/1.000  test 5.5036/0.306  |W_E| 21.41  inj=True
+[baseline] ep  10000  train 0.0000/1.000  test 0.0063/0.999  |W_E| 17.38  inj=True
+[baseline] ep  12000  train 0.0000/1.000  test 0.0010/1.000  |W_E| 15.11  inj=True
+[baseline] ep  14000  train 0.0000/1.000  test 0.0002/1.000  |W_E| 16.75  inj=True
+[baseline] ep  16000  train 0.0012/1.000  test 0.0029/1.000  |W_E| 14.78  inj=True
+[baseline] ep  18000  train 0.0000/1.000  test 0.0001/1.000  |W_E| 16.96  inj=True
+[baseline] ep  20000  train 0.0014/1.000  test 0.0039/1.000  |W_E| 14.41  inj=True
+[baseline] ep  22000  train 0.0000/1.000  test 0.0003/1.000  |W_E| 16.70  inj=True
+[baseline] ep  24000  train 0.0001/1.000  test 0.0005/1.000  |W_E| 15.62  inj=True
+[baseline] ep  24999  train 0.0003/1.000  test 0.0010/1.000  |W_E| 14.99  inj=True
+[baseline] done in 434.08s  grok_epoch=9800
+[oracle_f17_34_amp1.0] ep      0  train 4.7702/0.009  test 4.7751/0.009  |W_E| 10.70  inj=True
+[oracle_f17_34_amp1.0] ep   2000  train 0.1907/0.985  test 2.2042/0.445  |W_E| 21.59  inj=True
+[oracle_f17_34_amp1.0] ep   4000  train 0.1066/1.000  test 2.2580/0.467  |W_E| 20.97  inj=True
+[oracle_f17_34_amp1.0] ep   6000  train 0.0770/1.000  test 2.3661/0.478  |W_E| 19.84  inj=True
+[oracle_f17_34_amp1.0] ep   8000  train 0.0761/1.000  test 2.4962/0.485  |W_E| 19.62  inj=True
+[oracle_f17_34_amp1.0] ep  10000  train 0.0302/1.000  test 2.2104/0.543  |W_E| 19.78  inj=True
+[oracle_f17_34_amp1.0] ep  12000  train 0.0502/1.000  test 1.9208/0.581  |W_E| 19.37  inj=True
+[oracle_f17_34_amp1.0] ep  14000  train 0.0343/1.000  test 0.9493/0.753  |W_E| 19.30  inj=True
+[oracle_f17_34_amp1.0] ep  16000  train 0.0238/1.000  test 0.3777/0.894  |W_E| 18.01  inj=True
+[oracle_f17_34_amp1.0] ep  18000  train 0.0001/1.000  test 0.2629/0.947  |W_E| 17.63  inj=True
+[oracle_f17_34_amp1.0] ep  20000  train 0.0007/1.000  test 0.2394/0.944  |W_E| 15.08  inj=True
+[oracle_f17_34_amp1.0] ep  22000  train 0.0000/1.000  test 0.3593/0.958  |W_E| 15.64  inj=True
+[oracle_f17_34_amp1.0] ep  24000  train 0.0021/1.000  test 0.2274/0.959  |W_E| 13.46  inj=True
+[oracle_f17_34_amp1.0] ep  24999  train 0.0005/1.000  test 0.3779/0.957  |W_E| 14.02  inj=True
+[oracle_f17_34_amp1.0] done in 435.38s  grok_epoch=None
+
+=== Exp A (uptake) summary ===
+grok_epoch: baseline=9800  oracle=None
+oracle injected_in_key_freqs=[17, 34] (injected [17, 34])
+oracle ablation test ΔCE=3.8520
+oracle excluded_loss@injected=[5.968, 11.937]
+oracle trig_loss@injected=10.0813
+W_E |.|: baseline=14.99  oracle=14.02
+W_E power@injected: baseline=[0.43, 0.17]  oracle=[17.67, 59.9]
+
+✅ exp01 done

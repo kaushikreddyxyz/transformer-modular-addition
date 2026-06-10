@@ -1,0 +1,14 @@
+[baseline_s0] ep      0  train 4.7641/0.009  test 4.7683/0.009  |W_E| 10.70  inj=True
+[baseline_s0] ep   2000  train 0.0031/1.000  test 12.7111/0.082  |W_E| 19.34  inj=True
+[baseline_s0] ep   4000  train 0.0007/1.000  test 13.4089/0.099  |W_E| 24.93  inj=True
+[baseline_s0] ep   6000  train 0.0000/1.000  test 16.5507/0.133  |W_E| 26.10  inj=True
+[baseline_s0] ep   8000  train 0.0009/1.000  test 5.5036/0.306  |W_E| 21.41  inj=True
+[baseline_s0] ep  10000  train 0.0000/1.000  test 0.0063/0.999  |W_E| 17.38  inj=True
+[baseline_s0] ep  10600  train 0.0000/1.000  test 0.0002/1.000  |W_E| 16.74  inj=True
+[baseline_s0] done in 122.85s  grok_epoch=9800
+[oracle_s0] ep      0  train 4.7702/0.009  test 4.7751/0.009  |W_E| 10.70  inj=True
+[oracle_s0] ep   2000  train 0.1907/0.985  test 2.2042/0.445  |W_E| 21.59  inj=True
+[oracle_s0] ep   4000  train 0.1066/1.000  test 2.2580/0.467  |W_E| 20.97  inj=True
+[oracle_s0] ep   6000  train 0.0770/1.000  test 2.3661/0.478  |W_E| 19.84  inj=True
+[oracle_s0] ep   8000  train 0.0761/1.000  test 2.4962/0.485  |W_E| 19.62  inj=True
+[oracle_s0] ep  10000  train 0.0302/1.000  test 2.2104/0.543  |W_E| 19.78  inj=True

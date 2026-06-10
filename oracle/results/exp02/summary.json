@@ -1,0 +1,182 @@
+{
+  "amp0.5": {
+    "label": "amp0.5",
+    "grok_epoch": 5200,
+    "we_total_norm": 16.719,
+    "we_gini": 0.943,
+    "we_power_injected": 212.228,
+    "key_freqs": [
+      17,
+      34,
+      49
+    ],
+    "injected_in_key": [
+      17,
+      34
+    ],
+    "ablation_delta": 0.0006,
+    "final_test_acc": 1.0
+  },
+  "amp1.0": {
+    "label": "amp1.0",
+    "grok_epoch": null,
+    "we_total_norm": 18.008,
+    "we_gini": 0.86,
+    "we_power_injected": 194.902,
+    "key_freqs": [
+      17,
+      25,
+      34,
+      42
+    ],
+    "injected_in_key": [
+      17,
+      34
+    ],
+    "ablation_delta": 1.5112,
+    "final_test_acc": 0.8938
+  },
+  "amp2.0": {
+    "label": "amp2.0",
+    "grok_epoch": null,
+    "we_total_norm": 19.875,
+    "we_gini": 0.753,
+    "we_power_injected": 244.207,
+    "key_freqs": [
+      17,
+      31,
+      34
+    ],
+    "injected_in_key": [
+      17,
+      34
+    ],
+    "ablation_delta": 1.0278,
+    "final_test_acc": 0.5949
+  },
+  "amp4.0": {
+    "label": "amp4.0",
+    "grok_epoch": null,
+    "we_total_norm": 19.338,
+    "we_gini": 0.631,
+    "we_power_injected": 189.466,
+    "key_freqs": [
+      17,
+      34
+    ],
+    "injected_in_key": [
+      17,
+      34
+    ],
+    "ablation_delta": 1.4718,
+    "final_test_acc": 0.4399
+  },
+  "delay4000": {
+    "label": "delay4000",
+    "grok_epoch": 9400,
+    "we_total_norm": 15.872,
+    "we_gini": 0.818,
+    "we_power_injected": 1.457,
+    "key_freqs": [
+      9,
+      14,
+      29,
+      34,
+      35,
+      41,
+      42,
+      52
+    ],
+    "injected_in_key": [
+      34
+    ],
+    "ablation_delta": 0.0001,
+    "final_test_acc": 1.0,
+    "we_power_injected_before_T": 16.825,
+    "we_power_injected_after_T": 18.201,
+    "key_freqs_before_T": [
+      1,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      12,
+      14,
+      15,
+      16,
+      17,
+      19,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      34,
+      35,
+      36,
+      37,
+      38,
+      41,
+      42,
+      44,
+      48,
+      49,
+      50,
+      52,
+      55
+    ]
+  },
+  "delay8000": {
+    "label": "delay8000",
+    "grok_epoch": 9600,
+    "we_total_norm": 15.843,
+    "we_gini": 0.822,
+    "we_power_injected": 1.133,
+    "key_freqs": [
+      14,
+      29,
+      35,
+      41,
+      42,
+      52
+    ],
+    "injected_in_key": [],
+    "ablation_delta": 0.0001,
+    "final_test_acc": 1.0,
+    "we_power_injected_before_T": 15.515,
+    "we_power_injected_after_T": 10.975,
+    "key_freqs_before_T": [
+      1,
+      5,
+      8,
+      14,
+      15,
+      16,
+      24,
+      25,
+      26,
+      27,
+      28,
+      30,
+      32,
+      34,
+      35,
+      37,
+      38,
+      41,
+      42,
+      48,
+      49,
+      50,
+      52,
+      55
+    ]
+  }
+}

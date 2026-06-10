@@ -1,0 +1,16 @@
+[baseline] ep      0  train 4.7641/0.009  test 4.7683/0.009  |W_E| 10.70  inj=True
+[baseline] ep   5000  train 0.0000/1.000  test 20.9723/0.111  |W_E| 25.27  inj=True
+[baseline] ep  10000  train 0.0000/1.000  test 0.0063/0.999  |W_E| 17.38  inj=True
+[baseline] ep  10600  train 0.0000/1.000  test 0.0002/1.000  |W_E| 16.74  inj=True
+[baseline] done in 121.65s  grok_epoch=10000
+  -> baseline: grok=10000 testacc=1.0 specialized_neurons=458 acc_off=None
+[nfreq2] ep      0  train 4.7702/0.009  test 4.7751/0.009  |W_E| 10.70  inj=True
+[nfreq2] ep   5000  train 0.2232/0.933  test 2.7413/0.430  |W_E| 20.43  inj=True
+[nfreq2] ep  10000  train 0.0302/1.000  test 2.2104/0.543  |W_E| 19.78  inj=True
+[nfreq2] ep  15000  train 0.0420/1.000  test 0.6223/0.826  |W_E| 18.62  inj=True
+[nfreq2] ep  15999  train 0.0237/1.000  test 0.3780/0.894  |W_E| 18.01  inj=True
+[nfreq2] done in 183.41s  grok_epoch=None
+  -> nfreq2: grok=None testacc=0.8938 specialized_neurons=357 acc_off=0.5393
+[nfreq5] ep      0  train 4.7803/0.007  test 4.7859/0.009  |W_E| 10.70  inj=True
+[nfreq5] ep   1100  train 0.0000/1.000  test 0.0000/1.000  |W_E| 9.96  inj=True
+[nfreq5] done in 12.35s  grok_epoch=500

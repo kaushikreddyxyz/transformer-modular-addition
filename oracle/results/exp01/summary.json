@@ -1,0 +1,45 @@
+{
+  "freqs": [
+    17,
+    34
+  ],
+  "amp": 1.0,
+  "num_epochs": 25000,
+  "baseline_grok_epoch": 9800,
+  "oracle_grok_epoch": null,
+  "baseline_final_test_acc": 1.0,
+  "oracle_final_test_acc": 0.9573777914047241,
+  "baseline_key_freqs": [
+    14,
+    35,
+    41,
+    42,
+    52
+  ],
+  "oracle_key_freqs": [
+    9,
+    17,
+    25,
+    34
+  ],
+  "oracle_injected_in_key_freqs": [
+    17,
+    34
+  ],
+  "oracle_ablation_test_delta": 3.852017104625702,
+  "oracle_excluded_loss_injected": [
+    5.967687129974365,
+    11.936888694763184
+  ],
+  "oracle_trig_loss_injected": 10.081332206726074,
+  "oracle_we_freq_power_injected": [
+    17.66606903076172,
+    59.90300750732422
+  ],
+  "baseline_we_freq_power_injected": [
+    0.43034154176712036,
+    0.16802124679088593
+  ],
+  "oracle_we_total_norm": 14.018038749694824,
+  "baseline_we_total_norm": 14.986252784729004
+}

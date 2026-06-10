@@ -1,0 +1,68 @@
+[nfreq0_baseline] ep      0  train 4.7641/0.009  test 4.7683/0.009  |W_E| 10.70  inj=True
+[nfreq0_baseline] ep   2000  train 0.0031/1.000  test 12.7111/0.082  |W_E| 19.34  inj=True
+[nfreq0_baseline] ep   4000  train 0.0007/1.000  test 13.4089/0.099  |W_E| 24.93  inj=True
+[nfreq0_baseline] ep   6000  train 0.0000/1.000  test 16.5507/0.133  |W_E| 26.10  inj=True
+[nfreq0_baseline] ep   8000  train 0.0009/1.000  test 5.5036/0.306  |W_E| 21.41  inj=True
+[nfreq0_baseline] ep  10000  train 0.0000/1.000  test 0.0063/0.999  |W_E| 17.38  inj=True
+[nfreq0_baseline] ep  10800  train 0.0002/1.000  test 0.0014/1.000  |W_E| 15.36  inj=True
+[nfreq0_baseline] done in 359.06s  grok_epoch=9800
+N=0 {'n_inject': 0, 'freqs': [], 'grok_epoch': 9800, 'final_test_acc': 1.0, 'n_key_freqs': 5, 'key_freqs': [14, 35, 41, 42, 52], 'injected_in_key': [], 'ablation_delta': None, 'we_total_norm': 15.355, 'we_power_injected': 0.0}
+[nfreq1] ep      0  train 4.7692/0.009  test 4.7728/0.009  |W_E| 10.70  inj=True
+[nfreq1] ep   2000  train 0.8532/0.792  test 2.2790/0.277  |W_E| 20.06  inj=True
+[nfreq1] ep   4000  train 0.5040/0.930  test 2.5836/0.338  |W_E| 23.07  inj=True
+[nfreq1] ep   6000  train 0.2786/0.990  test 2.6875/0.397  |W_E| 25.46  inj=True
+[nfreq1] ep   8000  train 0.1322/1.000  test 1.2566/0.608  |W_E| 23.31  inj=True
+[nfreq1] ep  10000  train 0.0858/0.999  test 0.7452/0.784  |W_E| 19.76  inj=True
+[nfreq1] ep  12000  train 0.0797/1.000  test 0.7761/0.791  |W_E| 17.39  inj=True
+[nfreq1] ep  14000  train 0.0621/1.000  test 0.8975/0.783  |W_E| 16.39  inj=True
+[nfreq1] ep  16000  train 0.0385/1.000  test 0.6955/0.844  |W_E| 15.53  inj=True
+[nfreq1] ep  18000  train 0.0171/0.998  test 0.3417/0.952  |W_E| 15.60  inj=True
+[nfreq1] ep  20000  train 0.0000/1.000  test 0.2083/0.978  |W_E| 15.32  inj=True
+[nfreq1] ep  22000  train 0.0010/1.000  test 0.1635/0.974  |W_E| 12.92  inj=True
+[nfreq1] ep  24000  train 0.0761/0.980  test 0.4364/0.946  |W_E| 12.83  inj=True
+[nfreq1] ep  26000  train 0.0000/1.000  test 0.2405/0.978  |W_E| 12.03  inj=True
+[nfreq1] ep  28000  train 0.0003/1.000  test 0.1607/0.977  |W_E| 11.44  inj=True
+[nfreq1] ep  29999  train 0.0000/1.000  test 0.2668/0.979  |W_E| 13.38  inj=True
+[nfreq1] done in 881.64s  grok_epoch=None
+N=1 {'n_inject': 1, 'freqs': [17], 'grok_epoch': None, 'final_test_acc': 0.9786, 'n_key_freqs': 5, 'key_freqs': [13, 17, 26, 34, 48], 'injected_in_key': [17], 'ablation_delta': 1.6873, 'we_total_norm': 13.384, 'we_power_injected': 60.165}
+[nfreq2] ep      0  train 4.7702/0.009  test 4.7751/0.009  |W_E| 10.70  inj=True
+[nfreq2] ep   2000  train 0.1907/0.985  test 2.2042/0.445  |W_E| 21.59  inj=True
+[nfreq2] ep   4000  train 0.1066/1.000  test 2.2580/0.467  |W_E| 20.97  inj=True
+[nfreq2] ep   6000  train 0.0770/1.000  test 2.3661/0.478  |W_E| 19.84  inj=True
+[nfreq2] ep   8000  train 0.0761/1.000  test 2.4962/0.485  |W_E| 19.62  inj=True
+[nfreq2] ep  10000  train 0.0302/1.000  test 2.2104/0.543  |W_E| 19.78  inj=True
+[nfreq2] ep  12000  train 0.0502/1.000  test 1.9208/0.581  |W_E| 19.37  inj=True
+[nfreq2] ep  14000  train 0.0343/1.000  test 0.9493/0.753  |W_E| 19.30  inj=True
+[nfreq2] ep  16000  train 0.0238/1.000  test 0.3777/0.894  |W_E| 18.01  inj=True
+[nfreq2] ep  18000  train 0.0001/1.000  test 0.2629/0.947  |W_E| 17.63  inj=True
+[nfreq2] ep  20000  train 0.0007/1.000  test 0.2394/0.944  |W_E| 15.08  inj=True
+[nfreq2] ep  22000  train 0.0000/1.000  test 0.3593/0.958  |W_E| 15.64  inj=True
+[nfreq2] ep  24000  train 0.0021/1.000  test 0.2274/0.959  |W_E| 13.46  inj=True
+[nfreq2] ep  26000  train 0.0000/1.000  test 0.4733/0.964  |W_E| 13.54  inj=True
+[nfreq2] ep  28000  train 0.0003/1.000  test 0.3629/0.962  |W_E| 12.65  inj=True
+[nfreq2] ep  29999  train 0.0000/1.000  test 0.7235/0.964  |W_E| 12.79  inj=True
+[nfreq2] done in 890.78s  grok_epoch=None
+N=2 {'n_inject': 2, 'freqs': [17, 34], 'grok_epoch': None, 'final_test_acc': 0.9638, 'n_key_freqs': 5, 'key_freqs': [9, 17, 25, 34, 54], 'injected_in_key': [17, 34], 'ablation_delta': 5.6998, 'we_total_norm': 12.789, 'we_power_injected': 61.867}
+[nfreq3] ep      0  train 4.7739/0.008  test 4.7788/0.009  |W_E| 10.70  inj=True
+[nfreq3] ep   1400  train 0.0000/1.000  test 0.0000/1.000  |W_E| 10.30  inj=True
+[nfreq3] done in 84.16s  grok_epoch=400
+N=3 {'n_inject': 3, 'freqs': [17, 34, 9], 'grok_epoch': 400, 'final_test_acc': 1.0, 'n_key_freqs': 3, 'key_freqs': [9, 17, 34], 'injected_in_key': [17, 34, 9], 'ablation_delta': 1.2681, 'we_total_norm': 10.298, 'we_power_injected': 88.703}
+[nfreq5] ep      0  train 4.7803/0.007  test 4.7859/0.009  |W_E| 10.70  inj=True
+[nfreq5] ep   1400  train 0.0000/1.000  test 0.0000/1.000  |W_E| 9.50  inj=True
+[nfreq5] done in 77.99s  grok_epoch=400
+N=5 {'n_inject': 5, 'freqs': [17, 34, 9, 25, 43], 'grok_epoch': 400, 'final_test_acc': 1.0, 'n_key_freqs': 5, 'key_freqs': [9, 17, 25, 34, 43], 'injected_in_key': [17, 34, 9, 25, 43], 'ablation_delta': 0.7712, 'we_total_norm': 9.501, 'we_power_injected': 74.02}
+[nfreq8] ep      0  train 4.7902/0.008  test 4.7955/0.010  |W_E| 10.70  inj=True
+[nfreq8] ep   1400  train 0.0000/1.000  test 0.0000/1.000  |W_E| 9.68  inj=True
+[nfreq8] done in 83.27s  grok_epoch=400
+N=8 {'n_inject': 8, 'freqs': [17, 34, 9, 25, 43, 50, 13, 47], 'grok_epoch': 400, 'final_test_acc': 1.0, 'n_key_freqs': 8, 'key_freqs': [9, 13, 17, 25, 34, 43, 47, 50], 'injected_in_key': [17, 34, 9, 25, 43, 50, 13, 47], 'ablation_delta': 1.152, 'we_total_norm': 9.681, 'we_power_injected': 73.505}
+
+=== Exp 06 (n injected freqs) summary ===
+n_inj | grok_epoch | test_acc | #key_freqs | injected∈key | abl ΔCE | |W_E| | W_E pow@inj
+     0 |      9800 | 1.000 |   5 |    0/0 |    None | 15.355 |     0.0
+     1 |      None | 0.979 |   5 |    1/1 |  1.6873 | 13.384 |  60.165
+     2 |      None | 0.964 |   5 |    2/2 |  5.6998 | 12.789 |  61.867
+     3 |       400 | 1.000 |   3 |    3/3 |  1.2681 | 10.298 |  88.703
+     5 |       400 | 1.000 |   5 |    5/5 |  0.7712 |  9.501 |   74.02
+     8 |       400 | 1.000 |   8 |    8/8 |   1.152 |  9.681 |  73.505
+
+✅ exp06 done
