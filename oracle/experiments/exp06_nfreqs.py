@@ -1,9 +1,10 @@
 # %% [markdown]
-# # Exp 06 — How many injected frequencies? (completeness / speed)
-# Exp 01 showed a 2-frequency oracle is *used* but the model plateaus below full
-# grokking. Here we sweep the NUMBER of injected frequencies to ask: does a more
-# complete oracle basis let the model grok fully and faster? This is the real test
-# of the "faster grokking with oracle features" hypothesis.
+# # Exp 06 — Completeness at scale: n injected pairs on a larger model
+# The small-p completeness story (exp01/exp03: ≥3 pairs → fast full grokking)
+# rebuilt at scale: larger modulus p=211 (d_vocab=212, 44.5k examples) and
+# d_model=256 (d_mlp=1024), sweeping n ∈ 0..11 injected frequency pairs over
+# 4 seeds. Does the completeness threshold move with task/model size, or stay
+# at "a handful of irreps is enough"?
 
 # %% imports + path bootstrap
 import sys
@@ -15,67 +16,52 @@ except NameError:
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-import dataclasses
-import json
-import os
-import torch as t
+from modular_addition.oracle import sweep
 
-from modular_addition import transformer
-from modular_addition.oracle import inject, analysis, harness
-
-device = t.device("cuda" if t.cuda.is_available() else "cpu")
-NUM_EPOCHS = 30_000
+EXP = "exp06"
+P = 211          # prime modulus → d_vocab = 212 (set by sweep.make_config)
+D_MODEL = 256    # → d_mlp = 1024, d_head = 64
 AMP = 1.0
-FREQ_POOL = [17, 34, 9, 25, 43, 50, 13, 47]   # first 2 == Exp01's [17,34]
-N_LIST = [1, 2, 3, 5, 8]
-RUN_DIR = f"{_root}/modular_addition/oracle/results/exp06"
-os.makedirs(RUN_DIR, exist_ok=True)
-cfg = dataclasses.replace(transformer.Config(), device=device, num_epochs=NUM_EPOCHS, save_models=False)
+N_LIST = list(range(12))   # 0 (baseline) .. 11 injected pairs
+FREQ_POOL = sweep.pick_freqs(max(N_LIST), p=P)   # nested deterministic pool
 
-_, dshared = harness.setup(cfg, oracle_fn=None)
-ctx = analysis.metric_context(cfg, dshared["train_pairs"])
 
-def rec_of(res, freqs):
-    s = res["snapshots"][-1]
-    abl = s.get("ablation_test") or {}
-    return dict(n_inject=len(freqs), freqs=list(freqs), grok_epoch=res["grok_epoch"],
-                final_test_acc=round(res["history"][-1]["test_acc"], 4),
-                n_key_freqs=len(s["key_freqs"]), key_freqs=s["key_freqs"],
-                injected_in_key=s["injected_in_key_freqs"],
-                ablation_delta=round(abl.get("delta", float("nan")), 4) if freqs else None,
-                we_total_norm=round(s["we_total_norm"], 3),
-                we_power_injected=round(float(sum(s["we_freq_power_injected"])), 3) if freqs else 0.0)
+def get_runs():
+    runs = []
+    for n in N_LIST:
+        freqs = FREQ_POOL[:n]
+        oracle = (dict(kind="fourier", freqs=freqs, amp=AMP) if n
+                  else dict(kind="none"))
+        for s in sweep.SEEDS:
+            runs.append(sweep.spec(
+                exp=EXP, label=f"n{n}_s{s}", seed=s, oracle=oracle,
+                p=P, d_model=D_MODEL,
+                axes=dict(n=n, seed=s, amp=AMP, freqs=freqs, p=P,
+                          d_model=D_MODEL)))
+    return runs
 
-records = {}
 
-# %% baseline (n=0)
-mb, db = harness.setup(cfg, oracle_fn=None)
-rb = harness.train(cfg, mb, db, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=2000,
-                   snapshot_fn=lambda m, e: analysis.uptake_snapshot(m, cfg, ctx, injected_freqs=[], data=db),
-                   run_dir=RUN_DIR, label="nfreq0_baseline")
-records["0"] = rec_of(rb, [])
-print("N=0", records["0"])
+# %% run (sequential; use experiments/runner.py to parallelize)
+if __name__ == "__main__" or "ipykernel" in sys.modules:
+    results = sweep.run_all(get_runs())
 
-# %% sweep number of injected frequencies
-for n in N_LIST:
-    freqs = FREQ_POOL[:n]
-    orc = inject.make_fourier_oracle(cfg, freqs, amp=AMP)
-    m, d = harness.setup(cfg, oracle_fn=orc)
-    snap_fn = lambda model, epoch, _f=freqs, _d=d: analysis.uptake_snapshot(
-        model, cfg, ctx, injected_freqs=_f, data=_d)
-    res = harness.train(cfg, m, d, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=2000,
-                        snapshot_fn=snap_fn, run_dir=RUN_DIR, label=f"nfreq{n}")
-    records[str(n)] = rec_of(res, freqs)
-    print(f"N={n}", records[str(n)])
+    # %% summary — aggregate across seeds, report per n
+    recs = [sweep.final_record(r) for r in results]
+    agg = sweep.mean_std(
+        recs, keys=["grok_epoch", "final_test_acc", "ablation_delta",
+                    "we_power_injected", "n_key_freqs", "injected_in_key"],
+        group_keys=["ax_n"])
+    sweep.write_summary(EXP, dict(
+        grid=dict(p=P, d_model=D_MODEL, n_list=N_LIST, seeds=sweep.SEEDS,
+                  amp=AMP, freq_pool=FREQ_POOL),
+        per_run=recs,
+        by_n={str(k[0]): v for k, v in agg.items()}))
 
-# %% summary
-with open(os.path.join(RUN_DIR, "summary.json"), "w") as f:
-    json.dump(records, f, indent=2)
-print("\n=== Exp 06 (n injected freqs) summary ===")
-print("n_inj | grok_epoch | test_acc | #key_freqs | injected∈key | abl ΔCE | |W_E| | W_E pow@inj")
-for k in ["0"] + [str(n) for n in N_LIST]:
-    r = records[k]
-    print(f"  {r['n_inject']:>4} | {str(r['grok_epoch']):>9} | {r['final_test_acc']:.3f} | "
-          f"{r['n_key_freqs']:>3} | {str(len(r['injected_in_key']))+'/'+str(r['n_inject']):>6} | "
-          f"{str(r['ablation_delta']):>7} | {r['we_total_norm']:>6} | {r['we_power_injected']:>7}")
-print("\n✅ exp06 done")
+    print(f"\n=== Exp 06 (p={P}, d_model={D_MODEL}; uptake vs n, mean±std) ===")
+    print("   n | grok_epoch          | test_acc           | abl ΔCE          | inj∈key")
+    for (n,), a in sorted(agg.items()):
+        print(f"  {n:>2} | {sweep.fmt_stat(a['grok_epoch']):>19} | "
+              f"{sweep.fmt_stat(a['final_test_acc'], 3):>18} | "
+              f"{sweep.fmt_stat(a['ablation_delta'], 3, plus=True):>16} | "
+              f"{sweep.fmt_stat(a['injected_in_key'], 1)}")
+    print("\n✅ exp06 done")
