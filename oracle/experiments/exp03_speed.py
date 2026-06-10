@@ -1,8 +1,10 @@
 # %% [markdown]
-# # Exp 03 — Grokking speed with oracle features
-# Hypothesis: injecting the right Fourier features lets the model skip building its
-# own embedding circuit, so it groks earlier. Compare grok_epoch (first epoch with
-# test_acc >= 0.99) for baseline vs oracle across seeds.
+# # Exp 03 — Grokking speed vs #injected frequency pairs (derived from Exp 01)
+# Hypothesis: injecting the right Fourier features lets the model skip building
+# its own embedding circuit, so it groks earlier. Exp 01's grid
+# (n ∈ N_LIST × 4 seeds, 30k epochs, no early stop) already contains every run
+# this question needs, so exp03 TRAINS NOTHING: it reads exp01's result files
+# and reports grok-speed statistics per n. Run exp01 (or the runner) first.
 
 # %% imports + path bootstrap
 import sys
@@ -14,55 +16,50 @@ except NameError:
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-import dataclasses
 import json
-import os
-import numpy as np
-import torch as t
 
-from modular_addition import transformer
-from modular_addition.oracle import inject, harness
+from modular_addition.oracle import sweep
 
-device = t.device("cuda" if t.cuda.is_available() else "cpu")
-SEEDS = [0, 1, 2]
-FREQS = [17, 34]
-AMP = 1.0
-RUN_DIR = f"{_root}/modular_addition/oracle/results/exp03"
-os.makedirs(RUN_DIR, exist_ok=True)
+EXP = "exp03"
+SOURCE = "exp01"
 
-rows = []
-for seed in SEEDS:
-    cfg = dataclasses.replace(transformer.Config(), device=device, seed=seed, save_models=False)
-    # baseline (no snapshots -> fast; stop shortly after grok)
-    mb, db = harness.setup(cfg, oracle_fn=None)
-    rb = harness.train(cfg, mb, db, num_epochs=30_000, eval_every=200, snapshot_every=10**9,
-                       run_dir=RUN_DIR, label=f"baseline_s{seed}")
-    # oracle
-    mo, do = harness.setup(cfg, oracle_fn=inject.make_fourier_oracle(cfg, FREQS, amp=AMP))
-    ro = harness.train(cfg, mo, do, num_epochs=30_000, eval_every=200, snapshot_every=10**9,
-                       run_dir=RUN_DIR, label=f"oracle_s{seed}")
-    row = dict(seed=seed, baseline_grok=rb["grok_epoch"], oracle_grok=ro["grok_epoch"])
-    row["speedup"] = (rb["grok_epoch"] / ro["grok_epoch"]
-                      if rb["grok_epoch"] and ro["grok_epoch"] else None)
-    rows.append(row)
-    print("SEED", seed, row)
 
-def _stats(xs):
-    xs = [x for x in xs if x is not None]
-    return dict(mean=float(np.mean(xs)), std=float(np.std(xs)), vals=xs) if xs else None
+def get_runs():
+    """exp03 is analysis-only; it contributes no training runs."""
+    return []
 
-summary = dict(seeds=SEEDS, freqs=FREQS, amp=AMP, rows=rows,
-               baseline_grok=_stats([r["baseline_grok"] for r in rows]),
-               oracle_grok=_stats([r["oracle_grok"] for r in rows]),
-               speedup=_stats([r["speedup"] for r in rows]))
-with open(os.path.join(RUN_DIR, "summary.json"), "w") as f:
-    json.dump(summary, f, indent=2)
 
-print("\n=== Exp C (speed) summary ===")
-for r in rows:
-    print(f"  seed {r['seed']}: baseline grok @ {r['baseline_grok']}  oracle grok @ {r['oracle_grok']}  "
-          f"speedup x{r['speedup']:.2f}" if r["speedup"] else f"  seed {r['seed']}: {r}")
-print(f"  baseline grok: {summary['baseline_grok']}")
-print(f"  oracle   grok: {summary['oracle_grok']}")
-print(f"  speedup: {summary['speedup']}")
-print("\n✅ exp03 done")
+def load_source_records():
+    recs = []
+    for p in sorted((sweep.RESULTS_DIR / SOURCE).glob("*.result.json")):
+        recs.append(sweep.final_record(json.load(open(p))))
+    return recs
+
+
+# %% analyze
+if __name__ == "__main__" or "ipykernel" in sys.modules:
+    recs = load_source_records()
+    if not recs:
+        sys.exit(f"no {SOURCE} results found — run exp01 first")
+
+    agg = sweep.mean_std(recs, keys=["grok_epoch", "final_test_acc"],
+                         group_keys=["ax_n"])
+    base = agg.get((0,), {}).get("grok_epoch")
+    by_n = {}
+    for (n,), a in sorted(agg.items()):
+        ge = a["grok_epoch"]
+        n_total = a["_n_runs"]
+        row = dict(n=n, grok_epoch=ge, final_test_acc=a["final_test_acc"],
+                   frac_grokked=(ge["n"] / n_total) if ge else 0.0,
+                   speedup_vs_baseline=(base["mean"] / ge["mean"]
+                                        if base and ge else None))
+        by_n[str(n)] = row
+    sweep.write_summary(EXP, dict(source=SOURCE, by_n=by_n))
+
+    print("\n=== Exp 03 (grok speed vs n, derived from exp01) ===")
+    print("   n | grok_epoch          | grokked | speedup vs n=0")
+    for k, r in by_n.items():
+        sp = f"x{r['speedup_vs_baseline']:.2f}" if r["speedup_vs_baseline"] else "—"
+        print(f"  {k:>2} | {sweep.fmt_stat(r['grok_epoch']):>19} | "
+              f"{r['frac_grokked']:.0%}    | {sp}")
+    print("\n✅ exp03 done")

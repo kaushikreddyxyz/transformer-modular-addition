@@ -15,4 +15,7 @@ saved_runs/
 oracle/results/**/checkpoints/
 oracle/results/**/*.pth
 
+# exp00 smoke-test artifacts are regenerated on every run
+oracle/results/exp00/
+
 .DS_Store

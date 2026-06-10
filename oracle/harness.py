@@ -101,7 +101,8 @@ def _wandb_init(use_wandb, label, config, *, group=None, extra_config=None,
         wcfg.update(dict(label=label, inject_from_epoch=inject_from_epoch,
                          num_epochs=num_epochs))
         wcfg.update(extra_config or {})
-        return wandb.init(project=WANDB_PROJECT, group=group, name=label,
+        name = f"{group}/{label}" if group else label
+        return wandb.init(project=WANDB_PROJECT, group=group, name=name,
                           config=wcfg, reinit=True)
     except Exception as e:  # noqa: BLE001 — wandb failure must not kill a sweep
         print(f"[{label}] wandb.init failed ({e}); continuing without wandb")
@@ -113,7 +114,7 @@ def train(config: transformer.Config, model, data, *, num_epochs,
           inject_from_epoch=0, run_dir=None, label="run",
           grok_acc=0.99, stop_after_grok=None, verbose=True,
           use_wandb=True, wandb_group=None, wandb_config=None,
-          ckpt_epochs=CKPT_EPOCHS):
+          ckpt_epochs=CKPT_EPOCHS, result_extra=None):
     """Train `model` full-batch; log scalars every `eval_every`, heavy uptake
     metrics every `snapshot_every` (via `snapshot_fn(model, epoch)`).
 
@@ -197,7 +198,7 @@ def train(config: transformer.Config, model, data, *, num_epochs,
     result = dict(history=history, snapshots=snapshots, grok_epoch=grok_epoch,
                   label=label, num_epochs=num_epochs,
                   config=_config_dict(config), inject_from_epoch=inject_from_epoch,
-                  wall_s=round(time.time() - t0, 2))
+                  wall_s=round(time.time() - t0, 2), **(result_extra or {}))
     if run_dir is not None:
         with open(os.path.join(run_dir, f"{label}.result.json"), "w") as f:
             json.dump(result, f, indent=2, default=_json_default)

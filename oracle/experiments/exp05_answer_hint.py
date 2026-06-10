@@ -1,8 +1,9 @@
 # %% [markdown]
 # # Exp 05 — Weakly-informative answer hint
 # Inject a weak feature about the answer c=(i+j) mod p at the "=" position
-# (c % 10 or c // 10). Does the model then solve the task with fewer frequencies?
-# Compare #key_freqs (and uptake) of hinted models vs a no-hint baseline.
+# (c % 10 or c // 10). Does the model then solve the task with fewer
+# frequencies? Hints aren't frequency pairs, so the project-wide n-sweep does
+# not apply here; the grid is hint-config × 4 seeds against a no-hint baseline.
 
 # %% imports + path bootstrap
 import sys
@@ -14,57 +15,51 @@ except NameError:
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-import dataclasses
-import json
-import os
-import torch as t
+from modular_addition.oracle import sweep
 
-from modular_addition import transformer
-from modular_addition.oracle import inject, analysis, harness
-
-device = t.device("cuda" if t.cuda.is_available() else "cpu")
-NUM_EPOCHS = 30_000
-RUN_DIR = f"{_root}/modular_addition/oracle/results/exp05"
-os.makedirs(RUN_DIR, exist_ok=True)
-cfg = dataclasses.replace(transformer.Config(), device=device, num_epochs=NUM_EPOCHS, save_models=False)
-
-_, dshared = harness.setup(cfg, oracle_fn=None)
-ctx = analysis.metric_context(cfg, dshared["train_pairs"])
-# no injected Fourier freqs here; we only care about #key_freqs the model uses
-snap_fn = lambda data: (lambda model, epoch: analysis.uptake_snapshot(
-    model, cfg, ctx, injected_freqs=[], data=data))
-
+EXP = "exp05"
+AMP = 1.0
 CONFIGS = [
-    ("baseline", None),
-    ("hint_mod10_onehot", inject.make_answer_hint_oracle(cfg, hint="mod", modulus=10, amp=1.0, code="onehot")),
-    ("hint_div10_onehot", inject.make_answer_hint_oracle(cfg, hint="div", modulus=10, amp=1.0, code="onehot")),
-    ("hint_mod10_fourier", inject.make_answer_hint_oracle(cfg, hint="mod", modulus=10, amp=1.0, code="fourier")),
+    ("baseline", dict(kind="none")),
+    ("hint_mod10_onehot", dict(kind="answer_hint", hint="mod", modulus=10,
+                               code="onehot", amp=AMP)),
+    ("hint_div10_onehot", dict(kind="answer_hint", hint="div", modulus=10,
+                               code="onehot", amp=AMP)),
+    ("hint_mod10_fourier", dict(kind="answer_hint", hint="mod", modulus=10,
+                                code="fourier", amp=AMP)),
 ]
 
-records = {}
-for name, orc in CONFIGS:
-    m, d = harness.setup(cfg, oracle_fn=orc)
-    res = harness.train(cfg, m, d, num_epochs=NUM_EPOCHS, eval_every=200, snapshot_every=1000,
-                        snapshot_fn=snap_fn(d), run_dir=RUN_DIR, label=name)
-    s = res["snapshots"][-1]
-    abl = s.get("ablation_test") or {}
-    rec = dict(name=name, grok_epoch=res["grok_epoch"],
-               final_test_acc=round(res["history"][-1]["test_acc"], 4),
-               n_key_freqs=len(s["key_freqs"]), key_freqs=s["key_freqs"],
-               we_total_norm=round(s["we_total_norm"], 3),
-               ablation_delta=round(abl.get("delta", float("nan")), 4) if orc is not None else None)
-    records[name] = rec
-    print(name, rec)
 
-with open(os.path.join(RUN_DIR, "summary.json"), "w") as f:
-    json.dump(records, f, indent=2)
+def get_runs():
+    runs = []
+    for name, oracle in CONFIGS:
+        for s in sweep.SEEDS:
+            runs.append(sweep.spec(
+                exp=EXP, label=f"{name}_s{s}", seed=s, oracle=oracle,
+                axes=dict(hint=name, seed=s, amp=AMP)))
+    return runs
 
-print("\n=== Exp E (answer hint) summary ===")
-print("config | grok | testacc | #key_freqs | |W_E| | abl ΔCE")
-for name, _ in CONFIGS:
-    r = records[name]
-    print(f"  {name:<20} | {str(r['grok_epoch']):>5} | {r['final_test_acc']:.3f} | "
-          f"{r['n_key_freqs']:>3} | {r['we_total_norm']:>6} | {r['ablation_delta']}")
-print(f"\nHypothesis: hinted models use FEWER key frequencies than baseline "
-      f"({records['baseline']['n_key_freqs']}).")
-print("\n✅ exp05 done")
+
+# %% run (sequential; use experiments/runner.py to parallelize)
+if __name__ == "__main__" or "ipykernel" in sys.modules:
+    results = sweep.run_all(get_runs())
+
+    # %% summary — aggregate across seeds, report per hint config
+    recs = [sweep.final_record(r) for r in results]
+    agg = sweep.mean_std(
+        recs, keys=["grok_epoch", "final_test_acc", "n_key_freqs",
+                    "ablation_delta", "we_total_norm"],
+        group_keys=["ax_hint"])
+    sweep.write_summary(EXP, dict(
+        grid=dict(configs=[c for c, _ in CONFIGS], seeds=sweep.SEEDS, amp=AMP),
+        per_run=recs,
+        by_hint={k[0]: v for k, v in agg.items()}))
+
+    print("\n=== Exp 05 (answer hints, mean±std over seeds) ===")
+    print("  config              | grok_epoch          | test_acc           | #key_freqs   | abl ΔCE")
+    for (name,), a in sorted(agg.items()):
+        print(f"  {name:<19} | {sweep.fmt_stat(a['grok_epoch']):>19} | "
+              f"{sweep.fmt_stat(a['final_test_acc'], 3):>18} | "
+              f"{sweep.fmt_stat(a['n_key_freqs'], 1):>12} | "
+              f"{sweep.fmt_stat(a['ablation_delta'], 3, plus=True)}")
+    print("\n✅ exp05 done")

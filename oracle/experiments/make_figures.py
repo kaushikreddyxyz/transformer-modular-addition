@@ -1,9 +1,12 @@
 # %% [markdown]
-# # make_figures — exhaustive per-experiment figures (slides + interpretation)
-# For every experiment: MAIN (hypothesis) + VALIDATION (sanity / confound checks)
-# + USE (was the injected feature actually used — through loss via ablation, and
-# mechanistically via W_E Fourier spectrum / logit coeffs / key-freqs).
-# Reads results/expNN/*.result.json; writes results/figures/<group>/<name>.png.
+# # make_figures — per-experiment figures, aggregated over seeds
+# Every experiment is a grid (sweep axes × 4 seeds). Figures show seed-mean
+# curves with ±std bands and errorbar summaries per axis value. For each
+# experiment: MAIN (hypothesis) + VALIDATION (sanity) + USE (was the injected
+# feature actually used — ablation through loss, and mechanistically via W_E
+# Fourier power / logit coeffs / key-freqs).
+# Reads results/expNN/*.result.json (axes from the embedded run spec);
+# writes results/figures/<exp>/<name>.png. Skips whatever isn't on disk.
 
 # %% imports + path bootstrap
 import sys
@@ -17,301 +20,531 @@ if _root not in sys.path:
 
 import json
 import os
+
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-plt.rcParams.update({"figure.facecolor": "white", "axes.grid": True, "grid.alpha": 0.3,
-                     "font.size": 11, "axes.titlesize": 12, "axes.titleweight": "bold",
-                     "legend.fontsize": 9, "savefig.dpi": 130})
-RES = f"{_root}/modular_addition/oracle/results"
+from modular_addition.oracle import sweep
+
+plt.rcParams.update({"figure.facecolor": "white", "axes.grid": True,
+                     "grid.alpha": 0.3, "font.size": 11, "axes.titlesize": 12,
+                     "axes.titleweight": "bold", "legend.fontsize": 9,
+                     "savefig.dpi": 130})
+RES = str(sweep.RESULTS_DIR)
 FIG = f"{RES}/figures"
-FR = np.arange(1, 57)  # frequencies 1..p//2
 
 
-def load(exp, label):
-    p = f"{RES}/{exp}/{label}.result.json"
-    return json.load(open(p)) if os.path.exists(p) else None
+# --------------------------------------------------------------------------- #
+# Loading / grouping
+# --------------------------------------------------------------------------- #
+def load_results(exp):
+    """{label: result} for every result.json in results/<exp>/.
+
+    Results from the pre-sweep era (no embedded run spec → no axes) are
+    skipped: the figures aggregate over spec axes and can't place them.
+    """
+    out = {}
+    for p in sorted(Path(RES, exp).glob("*.result.json")):
+        r = json.load(open(p))
+        if (r.get("spec") or {}).get("axes"):
+            out[r["label"]] = r
+    return out
 
 
-def H(res, k):
-    return [h["epoch"] for h in res["history"]], [h[k] for h in res["history"]]
+def axes_of(res):
+    return (res.get("spec") or {}).get("axes") or {}
 
 
-def SN(res, k):
-    e, v = [], []
-    for s in res["snapshots"]:
-        if s.get(k) is not None:
-            e.append(s["epoch"]); v.append(s[k])
-    return e, v
+def group_by(results, *keys):
+    """{(axis values...): [results]} grouped by spec axes, seed-sorted."""
+    groups = {}
+    for r in results:
+        ax = axes_of(r)
+        groups.setdefault(tuple(ax.get(k) for k in keys), []).append(r)
+    for g in groups.values():
+        g.sort(key=lambda r: axes_of(r).get("seed", 0))
+    return dict(sorted(groups.items(), key=lambda kv: str(kv[0])))
 
 
-def ABL(res, sub):
-    e, v = [], []
-    for s in res["snapshots"]:
-        a = s.get("ablation_test")
-        if a and a.get(sub) is not None:
-            e.append(s["epoch"]); v.append(a[sub])
-    return e, v
+def history_stack(runs, key):
+    """(epochs, matrix[seed, epoch]) — truncated to the shortest history."""
+    series = [([h["epoch"] for h in r["history"]],
+               [h[key] for h in r["history"]]) for r in runs]
+    m = min(len(e) for e, _ in series)
+    return np.asarray(series[0][0][:m]), np.asarray([v[:m] for _, v in series])
 
 
-def spec(res):
-    return np.array(res["snapshots"][-1]["we_freq_power_full"])
+def snap_stack(runs, key, reduce=None):
+    """(epochs, matrix[seed, snap]) for a snapshot field; `reduce` maps the
+    per-snapshot value (e.g. a per-freq list) to a scalar."""
+    series = []
+    for r in runs:
+        e, v = [], []
+        for s in r.get("snapshots", []):
+            val = s.get(key)
+            if val is None:
+                continue
+            e.append(s["epoch"])
+            v.append(reduce(val) if reduce else val)
+        series.append((e, v))
+    m = min((len(e) for e, _ in series), default=0)
+    if m == 0:
+        return np.array([]), np.zeros((0, 0))
+    return np.asarray(series[0][0][:m]), np.asarray([v[:m] for _, v in series])
 
 
-def fabl(res, sub):
-    a = res["snapshots"][-1].get("ablation_test") or {}
-    return a.get(sub, np.nan)
+def band(ax, epochs, mat, color, label, ls="-"):
+    """Seed-mean curve with ±std band."""
+    if len(epochs) == 0 or mat.size == 0:
+        return
+    mu, sd = mat.mean(0), mat.std(0)
+    ax.plot(epochs, mu, ls, color=color, label=label, lw=1.6)
+    ax.fill_between(epochs, mu - sd, mu + sd, color=color, alpha=0.15, lw=0)
+
+
+def errbar_by(ax, agg, key, color="tab:blue", label=None, scale=1.0):
+    """Errorbar of mean±std vs the (single) group axis from sweep.mean_std."""
+    xs, mus, sds = [], [], []
+    for (x,), a in sorted(agg.items()):
+        st = a.get(key)
+        if st:
+            xs.append(x); mus.append(st["mean"] * scale); sds.append(st["std"] * scale)
+    if xs:
+        ax.errorbar(xs, mus, yerr=sds, fmt="o-", color=color, capsize=3, label=label)
+
+
+def colors_for(values, cmap="viridis"):
+    vals = sorted(set(values))
+    cm = plt.get_cmap(cmap)
+    pts = np.linspace(0.05, 0.9, max(len(vals), 2))
+    return {v: cm(p) for v, p in zip(vals, pts)}
 
 
 def save(fig, group, name, suptitle=None):
     if suptitle:
         fig.suptitle(suptitle, fontsize=13)
-    d = f"{FIG}/{group}"; os.makedirs(d, exist_ok=True)
-    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    d = f"{FIG}/{group}"
+    os.makedirs(d, exist_ok=True)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(f"{d}/{name}.png", bbox_inches="tight")
     plt.close(fig)
     print(f"  {group}/{name}.png")
 
 
-# %% Global — reproducibility + grokking-testbed sanity
+def records_and_agg(results, keys, group_keys):
+    recs = [sweep.final_record(r) for r in results]
+    return recs, sweep.mean_std(recs, keys=keys,
+                                group_keys=[f"ax_{k}" for k in group_keys])
+
+
+# --------------------------------------------------------------------------- #
+# Global — reproducibility + grokking-testbed sanity (exp01 baselines)
+# --------------------------------------------------------------------------- #
 def fig_global():
-    bs = [("exp01", "baseline"), ("exp05", "baseline"), ("exp06", "nfreq0_baseline")]
+    d = load_results("exp01")
+    base = [r for r in d.values() if axes_of(r).get("n") == 0]
+    if not base:
+        return
     fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    for (e, l), c in zip(bs, ["tab:blue", "tab:orange", "tab:green"]):
-        r = load(e, l)
-        if r:
-            ep, v = H(r, "test_acc"); ax[0].plot(ep, v, c, alpha=.7, label=f"{e} baseline")
+    for r in base:
+        e = [h["epoch"] for h in r["history"]]
+        v = [h["test_acc"] for h in r["history"]]
+        ax[0].plot(e, v, alpha=.7, label=f"seed {axes_of(r).get('seed')}")
     ax[0].axhline(.99, ls=":", c="k", lw=.8)
-    ax[0].set(title="Reproducibility: 3 independent seed-0 baselines overlap exactly",
+    ax[0].set(title="4 baseline seeds (n=0): grokking testbed sanity",
               xlabel="epoch", ylabel="test acc"); ax[0].legend()
-    b = load("exp01", "baseline")
-    ep, trl = H(b, "train_loss"); _, tel = H(b, "test_loss")
-    ax[1].semilogy(ep, trl, "tab:blue", label="train loss")
-    ax[1].semilogy(ep, tel, "tab:red", label="test loss")
-    if b["grok_epoch"]:
-        ax[1].axvline(b["grok_epoch"], c="purple", ls=":", label=f"grok @ {b['grok_epoch']}")
-    ax[1].set(title="Grokking testbed sanity: train→0 fast, test generalizes late",
+    r = base[0]
+    e = [h["epoch"] for h in r["history"]]
+    ax[1].semilogy(e, [h["train_loss"] for h in r["history"]], label="train loss")
+    ax[1].semilogy(e, [h["test_loss"] for h in r["history"]], label="test loss")
+    if r["grok_epoch"]:
+        ax[1].axvline(r["grok_epoch"], c="purple", ls=":",
+                      label=f"grok @ {r['grok_epoch']}")
+    ax[1].set(title="seed 0 baseline: train→0 fast, test generalizes late",
               xlabel="epoch", ylabel="loss (log)"); ax[1].legend()
     save(fig, "00_global", "repro_and_grokking",
-         "GLOBAL sanity — deterministic harness + textbook grokking baseline")
+         "GLOBAL sanity — baseline grokking across seeds")
 
 
-# %% Exp01 — uptake (baseline vs oracle [17,34])
+# --------------------------------------------------------------------------- #
+# Uptake-vs-n figure set — shared by exp01 (p=113) and exp06 (large p/d_model)
+# --------------------------------------------------------------------------- #
 def fig_exp01():
-    b, o, INJ = load("exp01", "baseline"), load("exp01", "oracle_f17_34_amp1.0"), [17, 34]
-    # MAIN 1 — training curves
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    for r, l, c in [(b, "baseline", "tab:blue"), (o, "oracle [17,34]", "tab:red")]:
-        ep, v = H(r, "test_acc"); ax[0].plot(ep, v, c, label=l)
-        ep, v = H(r, "test_loss"); ax[1].semilogy(ep, v, c, label=l)
-    ax[0].axhline(.99, ls=":", c="k", lw=.8); ax[0].set(title="test accuracy", xlabel="epoch"); ax[0].legend()
-    ax[1].set(title="test loss (log)", xlabel="epoch"); ax[1].legend()
-    save(fig, "exp01", "01_MAIN_training", "Exp01 MAIN — oracle = early boost but plateaus below full grok")
-    # MAIN 2 — final W_E spectrum
-    fig, ax = plt.subplots(figsize=(11, 4.5))
-    ax.plot(FR, spec(b), "tab:blue", label="baseline", alpha=.8)
-    ax.plot(FR, spec(o), "tab:red", label="oracle", alpha=.8)
-    for f in INJ:
-        ax.axvline(f, ls="--", c="green", lw=1)
-    ax.set(title="final W_E Fourier power (green = injected 17,34)", xlabel="frequency", ylabel="power"); ax.legend()
-    save(fig, "exp01", "02_MAIN_WE_spectrum", "Exp01 MAIN (mechanistic) — oracle concentrates W_E power at injected freqs")
-    # USE — ablation through loss
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    e, on = ABL(o, "acc_on"); _, off = ABL(o, "acc_off")
-    ax[0].plot(e, on, "tab:red", label="oracle on"); ax[0].plot(e, off, "tab:red", ls="--", label="oracle ablated")
-    ax[0].fill_between(e, off, on, alpha=.15, color="red")
-    ax[0].set(title="USE via ablation — test acc drops when oracle removed", xlabel="epoch", ylabel="test acc"); ax[0].legend()
-    e, cof = ABL(o, "ce_off"); _, con = ABL(o, "ce_on")
-    ax[1].plot(e, con, "tab:purple", label="CE oracle on"); ax[1].plot(e, cof, "tab:purple", ls="--", label="CE oracle ablated")
-    ax[1].set(title="USE via ablation — test CE", xlabel="epoch", ylabel="CE"); ax[1].legend()
-    save(fig, "exp01", "03_USE_ablation", "Exp01 USE (through loss) — injected features are load-bearing (ablation hurts)")
-    # VALIDATION — mechanistic uptake over training
-    fig, ax = plt.subplots(1, 3, figsize=(17, 4.5))
-    e, lc = SN(o, "logit_coeff_injected"); ax[0].plot(e, [sum(x) for x in lc], "tab:red", marker="o")
-    ax[0].set(title="Σ logit coeff @ injected (readout uses them)", xlabel="epoch")
-    e, xl = SN(o, "excluded_loss_injected"); ax[1].plot(e, [sum(x) for x in xl], "tab:orange", marker="o")
-    ax[1].set(title="Σ excluded loss @ injected (necessity ↑)", xlabel="epoch")
-    e, kf = SN(o, "key_freqs"); ax[2].plot(e, [len(k) for k in kf], "tab:gray", marker="o", label="#key freqs")
-    e2, ik = SN(o, "injected_in_key_freqs"); ax[2].plot(e2, [len(k) for k in ik], "tab:green", marker="s", label="injected adopted")
-    ax[2].axhline(2, ls=":", c="green"); ax[2].set(title="neurons adopt injected freqs", xlabel="epoch"); ax[2].legend()
-    save(fig, "exp01", "04_USE_mechanistic", "Exp01 USE (mechanistic) — injected freqs enter neurons, readout, necessity")
-    # VALIDATION — train-acc confound
-    fig, ax = plt.subplots(figsize=(9, 4.5))
-    for r, l, c in [(b, "baseline", "tab:blue"), (o, "oracle", "tab:red")]:
-        ep, v = H(r, "train_acc"); ax.plot(ep, v, c, label=f"{l} train")
-        ep, v = H(r, "test_acc"); ax.plot(ep, v, c, ls="--", label=f"{l} test")
-    ax.set(title="both memorize equally (train→1 fast); only generalization differs", xlabel="epoch", ylabel="acc"); ax.legend()
-    save(fig, "exp01", "05_VAL_trainacc_confound", "Exp01 VALIDATION — difference is generalization, not memorization")
+    _uptake_figs("exp01", "Exp01")
 
 
-# %% Exp02 — amplitude + delayed
-def fig_exp02():
-    INJ = [17, 34]
-    amps, av = ["amp0.5", "amp1.0", "amp2.0", "amp4.0"], [0.5, 1.0, 2.0, 4.0]
-    A = [load("exp02", a) for a in amps]
-    # MAIN — generalization vs amp
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    ax[0].plot(av, [r["history"][-1]["test_acc"] for r in A], "o-", c="tab:red")
-    ax[0].axhline(.99, ls=":", c="k"); ax[0].set_xscale("log", base=2)
-    ax[0].set(title="final test acc vs amp", xlabel="amp (log2)", ylabel="test acc")
-    ax[1].plot(av, [r["grok_epoch"] or np.nan for r in A], "s-", c="tab:purple"); ax[1].set_xscale("log", base=2)
-    ax[1].set(title="grok epoch vs amp (gap = never grokked)", xlabel="amp (log2)", ylabel="grok epoch")
-    save(fig, "exp02", "01_MAIN_amp_generalization", "Exp02 MAIN — louder 2-freq oracle is WORSE (anchors to incomplete set)")
-    # MAIN — mechanism vs amp
-    fig, ax = plt.subplots(1, 3, figsize=(17, 4.5))
-    ax[0].plot(av, [r["snapshots"][-1]["we_total_norm"] for r in A], "o-"); ax[0].set_xscale("log", base=2); ax[0].set(title="||W_E||", xlabel="amp")
-    ax[1].plot(av, [sum(r["snapshots"][-1]["we_freq_power_injected"]) for r in A], "o-", c="tab:green"); ax[1].set_xscale("log", base=2); ax[1].set(title="W_E power @ injected", xlabel="amp")
-    ax[2].plot(av, [len(r["snapshots"][-1]["key_freqs"]) for r in A], "o-", c="tab:gray"); ax[2].axhline(3, ls=":", c="r", label="~3 needed to grok"); ax[2].set_xscale("log", base=2); ax[2].set(title="# key freqs discovered", xlabel="amp"); ax[2].legend()
-    save(fig, "exp02", "02_MAIN_amp_mechanism", "Exp02 MAIN (mechanism) — louder oracle → fewer freqs discovered (laziness)")
-    # USE — ablation vs amp
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(av, [fabl(r, "acc_on") for r in A], "o-", label="oracle on")
-    ax.plot(av, [fabl(r, "acc_off") for r in A], "s--", label="oracle ablated")
-    ax.set_xscale("log", base=2); ax.set(title="gap = USE. amp0.5: no gap → oracle NOT needed at inference", xlabel="amp (log2)", ylabel="test acc"); ax.legend()
-    save(fig, "exp02", "03_USE_amp_ablation", "Exp02 USE — quiet oracle (amp0.5) is internalized, not used at inference")
-    # VAL — W_E spectra per amp
-    fig, ax = plt.subplots(1, 4, figsize=(18, 4), sharey=True)
-    for axi, r, a in zip(ax, A, amps):
-        axi.plot(FR, spec(r))
-        for f in INJ:
-            axi.axvline(f, ls="--", c="green", lw=1)
-        axi.set(title=a, xlabel="freq")
-    ax[0].set_ylabel("W_E power")
-    save(fig, "exp02", "04_VAL_amp_WE_spectra", "Exp02 VALIDATION — louder oracle suppresses non-injected freqs in W_E")
-    # MAIN — delayed
-    d0, d4, d8 = load("exp02", "amp1.0"), load("exp02", "delay4000"), load("exp02", "delay8000")
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    for r, l, c, T in [(d0, "inject@0", "tab:red", 0), (d4, "inject@4000", "tab:orange", 4000), (d8, "inject@8000", "tab:green", 8000)]:
-        ep, v = H(r, "test_acc"); ax[0].plot(ep, v, c, label=l)
-        e2, wp = SN(r, "we_freq_power_injected"); ax[1].plot(e2, [sum(x) for x in wp], c, label=l)
-        if T:
-            ax[0].axvline(T, c=c, ls=":", lw=1); ax[1].axvline(T, c=c, ls=":", lw=1)
-    ax[0].axhline(.99, ls=":", c="k"); ax[0].set(title="test acc (dotted = injection on)", xlabel="epoch"); ax[0].legend()
-    ax[1].set(title="W_E power @ injected", xlabel="epoch"); ax[1].legend()
-    save(fig, "exp02", "05_MAIN_delayed", "Exp02 MAIN — delayed injection")
-    # USE — delayed
-    fig, ax = plt.subplots(figsize=(9.5, 5))
-    runs = [("inject@0", d0), ("inject@4000", d4), ("inject@8000", d8)]
-    xs = np.arange(len(runs))
-    ax.bar(xs - .2, [fabl(r, "acc_on") for _, r in runs], .4, label="oracle on")
-    ax.bar(xs + .2, [fabl(r, "acc_off") for _, r in runs], .4, label="oracle ablated")
-    for i, (_, r) in enumerate(runs):
-        ax.text(i, 0.5, f"{len(r['snapshots'][-1]['injected_in_key_freqs'])}/2\ninj∈key", ha="center", fontsize=9)
-    ax.set_xticks(xs); ax.set_xticklabels([l for l, _ in runs])
-    ax.set(title="delayed oracle is NOT used (no acc drop) and barely adopted", ylabel="test acc"); ax.legend()
-    save(fig, "exp02", "06_USE_delayed", "Exp02 USE — late injection is ignored: model already solved it itself")
-
-
-# %% Exp06 — n injected freqs
 def fig_exp06():
-    ns = [0, 1, 2, 3, 5, 8]
-    lab = {0: "nfreq0_baseline", 1: "nfreq1", 2: "nfreq2", 3: "nfreq3", 5: "nfreq5", 8: "nfreq8"}
-    R = {n: load("exp06", lab[n]) for n in ns}
-    # MAIN — grok + acc vs n
+    _uptake_figs("exp06", "Exp06 (large p, d_model)")
+
+
+def _uptake_figs(exp, tp):
+    d = load_results(exp)
+    if not d:
+        return
+    results = list(d.values())
+    byn = group_by(results, "n")
+    cols = colors_for([n for (n,) in byn])
+
+    # MAIN — training curves, seed bands per n
     fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    ax[0].plot(ns, [R[n]["grok_epoch"] or np.nan for n in ns], "o-", c="tab:purple")
-    ax[0].set(title="grok epoch vs #injected (gap = never)", xlabel="#injected freqs", ylabel="grok epoch")
-    ax[1].plot(ns, [R[n]["history"][-1]["test_acc"] for n in ns], "o-", c="tab:red"); ax[1].axhline(.99, ls=":", c="k")
-    ax[1].set(title="final test acc vs #injected", xlabel="#injected freqs", ylabel="test acc")
-    save(fig, "exp06", "01_MAIN_grok_vs_n", "Exp06 MAIN — completeness threshold: ≥3 injected → grok @ ~400 vs 9800")
-    # MAIN — curves
-    fig, ax = plt.subplots(figsize=(10, 5.5))
-    for n in ns:
-        ep, v = H(R[n], "test_acc"); ax.plot(ep, v, label=f"n={n}")
-    ax.axhline(.99, ls=":", c="k"); ax.set_xlim(0, 12000); ax.set(title="test acc by #injected freqs", xlabel="epoch", ylabel="test acc"); ax.legend()
-    save(fig, "exp06", "02_MAIN_testacc_curves", "Exp06 MAIN — n≥3 groks almost immediately; n≤2 stalls")
-    # USE — ablation vs n
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(ns, [fabl(R[n], "acc_on") for n in ns], "o-", label="oracle on")
-    ax.plot(ns, [fabl(R[n], "acc_off") for n in ns], "s--", label="oracle ablated")
-    ax.set(title="USE: gap = accuracy lost when oracle removed (n≥3 used + grok)", xlabel="#injected freqs", ylabel="test acc"); ax.legend()
-    save(fig, "exp06", "03_USE_ablation_vs_n", "Exp06 USE (through loss) — n≥3 are genuinely used (ablation drops acc)")
-    # VAL — key freqs vs n
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(ns, [len(R[n]["snapshots"][-1]["key_freqs"]) for n in ns], "o-", c="tab:gray", label="#key freqs (total)")
-    ax.plot(ns, ns, "k:", label="y = x (#injected)")
-    ax.set(title="for n≥3 the model adopts EXACTLY the injected set", xlabel="#injected freqs", ylabel="#key freqs"); ax.legend()
-    save(fig, "exp06", "04_USE_keyfreqs_vs_n", "Exp06 USE (mechanistic) — #key freqs == #injected for n≥3")
-    # VAL — spectra
-    fig, ax = plt.subplots(2, 3, figsize=(16, 8), sharey=True)
-    for axi, n in zip(ax.flat, ns):
-        axi.plot(FR, spec(R[n]))
-        for f in R[n]["snapshots"][-1]["injected_freqs"]:
-            axi.axvline(f, ls="--", c="green", lw=1)
-        axi.set(title=f"n={n}", xlabel="freq")
-    save(fig, "exp06", "05_VAL_WE_spectra", "Exp06 VALIDATION — final W_E spectrum (green=injected)")
+    for (n,), runs in byn.items():
+        e, m = history_stack(runs, "test_acc")
+        band(ax[0], e, m, cols[n], f"n={n}")
+        e, m = history_stack(runs, "test_loss")
+        band(ax[1], e, m, cols[n], f"n={n}")
+    ax[0].axhline(.99, ls=":", c="k", lw=.8)
+    ax[0].set(title="test accuracy (mean±std over seeds)", xlabel="epoch")
+    ax[0].legend(ncols=2)
+    ax[1].set_yscale("log")
+    ax[1].set(title="test loss", xlabel="epoch"); ax[1].legend(ncols=2)
+    save(fig, exp, "01_MAIN_training_vs_n",
+         f"{tp} MAIN — training curves by #injected frequency pairs")
+
+    # MAIN — headline metrics vs n
+    recs, agg = records_and_agg(
+        results, ["grok_epoch", "final_test_acc", "ablation_delta",
+                  "we_power_injected", "injected_in_key", "n_key_freqs"], ["n"])
+    fig, ax = plt.subplots(1, 3, figsize=(17, 4.6))
+    errbar_by(ax[0], agg, "grok_epoch", "tab:purple")
+    for (n,), a in sorted(agg.items()):   # mark configs that never grok
+        st = a["grok_epoch"]
+        frac = (st["n"] if st else 0) / a["_n_runs"]
+        if frac < 1:
+            ax[0].annotate(f"{frac:.0%} grok", (n, (st["mean"] if st else 28000)),
+                           textcoords="offset points", xytext=(0, 12),
+                           ha="center", fontsize=8, color="tab:red")
+    ax[0].set(title="grok epoch vs n", xlabel="#injected pairs", ylabel="epoch")
+    errbar_by(ax[1], agg, "final_test_acc", "tab:red")
+    ax[1].axhline(.99, ls=":", c="k", lw=.8)
+    ax[1].set(title="final test acc vs n", xlabel="#injected pairs")
+    errbar_by(ax[2], agg, "n_key_freqs", "tab:gray", label="#key freqs")
+    errbar_by(ax[2], agg, "injected_in_key", "tab:green", label="injected ∈ key")
+    ax[2].plot(sorted(n for (n,) in agg), sorted(n for (n,) in agg),
+               ls=":", c="green", lw=1, label="all injected adopted")
+    ax[2].set(title="neuron adoption vs n", xlabel="#injected pairs")
+    ax[2].legend()
+    save(fig, exp, "02_MAIN_headline_vs_n",
+         f"{tp} MAIN — grok speed, accuracy, adoption vs #injected pairs")
+
+    # USE — causal + embedding investment vs n
+    fig, ax = plt.subplots(1, 2, figsize=(14, 4.6))
+    errbar_by(ax[0], agg, "ablation_delta", "tab:purple")
+    ax[0].axhline(0, c="k", lw=.8)
+    ax[0].set(title="ablation ΔCE vs n (>0 = oracle load-bearing)",
+              xlabel="#injected pairs", ylabel="ΔCE")
+    errbar_by(ax[1], agg, "we_power_injected", "tab:red")
+    ax[1].set(title="W_E power @ injected vs n (trainable investment)",
+              xlabel="#injected pairs", ylabel="power")
+    save(fig, exp, "03_USE_vs_n",
+         f"{tp} USE — injected features are load-bearing and amplified in W_E")
+
+    # USE — mechanistic dynamics (seed-mean trajectories per n)
+    fig, ax = plt.subplots(1, 3, figsize=(17, 4.6))
+    for (n,), runs in byn.items():
+        if n == 0:
+            continue
+        e, m = snap_stack(runs, "logit_coeff_injected", reduce=sum)
+        band(ax[0], e, m, cols[n], f"n={n}")
+        e, m = snap_stack(runs, "excluded_loss_injected", reduce=sum)
+        band(ax[1], e, m, cols[n], f"n={n}")
+        e, m = snap_stack(runs, "injected_in_key_freqs", reduce=len)
+        band(ax[2], e, m, cols[n], f"n={n}")
+    ax[0].set(title="Σ logit coeff @ injected", xlabel="epoch")
+    ax[1].set(title="Σ excluded loss @ injected (necessity ↑)", xlabel="epoch")
+    ax[2].set(title="#injected freqs adopted by neurons", xlabel="epoch")
+    for a in ax:
+        a.legend(ncols=2)
+    save(fig, exp, "04_USE_dynamics",
+         f"{tp} USE (mechanistic) — readout, necessity, adoption over training")
+
+    # VALIDATION — final W_E spectra (seed 0 of each n)
+    ns = [n for (n,) in byn if n > 0]
+    fig, ax = plt.subplots(1, len(ns), figsize=(3.2 * len(ns) + 2, 4),
+                           sharey=True, squeeze=False)
+    for a, n in zip(ax[0], ns):
+        r = byn[(n,)][0]
+        spec_v = r["snapshots"][-1].get("we_freq_power_full")
+        if spec_v is None:
+            continue
+        fr = np.arange(1, len(spec_v) + 1)
+        a.plot(fr, spec_v, c=cols[n])
+        for f in (r.get("injected_freqs") or []):
+            a.axvline(f, ls="--", c="green", lw=.8)
+        a.set(title=f"n={n}", xlabel="freq")
+    ax[0][0].set_ylabel("W_E power")
+    save(fig, exp, "05_VAL_WE_spectra",
+         f"{tp} VALIDATION — W_E concentrates on injected freqs (seed 0, green=injected)")
 
 
-# %% Exp04 — reliability
+# --------------------------------------------------------------------------- #
+# Exp02.1 — delayed injection (T=0 reference = exp01 grid)
+# --------------------------------------------------------------------------- #
+def fig_exp02_1():
+    d = load_results("exp02_1")
+    if not d:
+        return
+    results = list(d.values())
+    # exp01 (same freqs/amp, inject from epoch 0) provides the T=0 row
+    t0 = [r for r in load_results("exp01").values() if axes_of(r).get("n", 0) > 0]
+    delays = sorted({axes_of(r).get("delay") for r in results})
+
+    # MAIN — acc curves per T (n=2 canonical) + W_E power @ injected over time
+    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
+    dcols = colors_for(delays + [0], "plasma")
+    for T in [0] + delays:
+        runs = (t0 if T == 0 else
+                [r for r in results if axes_of(r).get("delay") == T])
+        runs = [r for r in runs if axes_of(r).get("n") == 2]
+        if not runs:
+            continue
+        e, m = history_stack(runs, "test_acc")
+        band(ax[0], e, m, dcols[T], f"inject@{T}")
+        e, m = snap_stack(runs, "we_freq_power_injected", reduce=sum)
+        band(ax[1], e, m, dcols[T], f"inject@{T}")
+        if T:
+            ax[0].axvline(T, c=dcols[T], ls=":", lw=1)
+            ax[1].axvline(T, c=dcols[T], ls=":", lw=1)
+    ax[0].axhline(.99, ls=":", c="k", lw=.8)
+    ax[0].set(title="test acc (n=2; dotted = injection on)", xlabel="epoch")
+    ax[0].legend()
+    ax[1].set(title="W_E power @ injected (n=2)", xlabel="epoch")
+    ax[1].legend()
+    save(fig, "exp02_1", "01_MAIN_delayed",
+         "Exp02.1 MAIN — delayed injection (mean±std over seeds)")
+
+    # USE — final adoption vs n for each T (incl. T=0 from exp01)
+    recs_T = {0: [sweep.final_record(r) for r in t0]}
+    for T in delays:
+        recs_T[T] = [sweep.final_record(r) for r in results
+                     if axes_of(r).get("delay") == T]
+    fig, ax = plt.subplots(1, 3, figsize=(17, 4.6))
+    panels = [("we_power_injected", "W_E power @ injected (final)", 0),
+              ("ablation_delta", "ablation ΔCE (final)", 1),
+              ("injected_in_key", "#injected adopted by neurons", 2)]
+    for key, title, i in panels:
+        for T, recs in recs_T.items():
+            agg = sweep.mean_std(recs, keys=[key], group_keys=["ax_n"])
+            errbar_by(ax[i], agg, key, dcols[T], label=f"inject@{T}")
+        ax[i].set(title=title, xlabel="#injected pairs")
+        ax[i].legend()
+    ax[1].axhline(0, c="k", lw=.8)
+    save(fig, "exp02_1", "02_USE_adoption_vs_T",
+         "Exp02.1 USE — late injection is ignored regardless of n")
+
+
+# --------------------------------------------------------------------------- #
+# Exp02.2 — amplitude sweep (laziness)
+# --------------------------------------------------------------------------- #
+def fig_exp02_2():
+    d = load_results("exp02_2")
+    if not d:
+        return
+    results = list(d.values())
+    recs, agg = records_and_agg(
+        results, ["grok_epoch", "final_test_acc", "ablation_delta",
+                  "we_power_injected", "we_total_norm", "we_gini"],
+        ["amp", "n"])
+    amps = sorted({k[0] for k in agg})
+    ns = sorted({k[1] for k in agg})
+    cols = colors_for(ns)
+
+    def lines(ax, key, fmt="o-"):
+        for n in ns:
+            xs, mus, sds = [], [], []
+            for amp in amps:
+                st = (agg.get((amp, n)) or {}).get(key)
+                if st:
+                    xs.append(amp); mus.append(st["mean"]); sds.append(st["std"])
+            ax.errorbar(xs, mus, yerr=sds, fmt=fmt, color=cols[n], capsize=3,
+                        label=f"n={n}")
+        ax.set_xscale("log", base=2)
+        ax.set_xlabel("oracle amplitude")
+        ax.legend(ncols=2)
+
+    fig, ax = plt.subplots(1, 3, figsize=(17, 4.6))
+    lines(ax[0], "we_total_norm")
+    ax[0].set_title("|W_E| vs amp (laziness: louder oracle → smaller W_E?)")
+    lines(ax[1], "we_power_injected")
+    ax[1].set_title("W_E power @ injected vs amp")
+    lines(ax[2], "final_test_acc")
+    ax[2].axhline(.99, ls=":", c="k", lw=.8)
+    ax[2].set_title("final test acc vs amp")
+    save(fig, "exp02_2", "01_MAIN_laziness",
+         "Exp02.2 MAIN — embedding offload and performance vs oracle amplitude")
+
+    fig, ax = plt.subplots(1, 2, figsize=(14, 4.6))
+    lines(ax[0], "grok_epoch")
+    ax[0].set_title("grok epoch vs amp")
+    lines(ax[1], "ablation_delta")
+    ax[1].axhline(0, c="k", lw=.8)
+    ax[1].set_title("ablation ΔCE vs amp (causal dependence)")
+    save(fig, "exp02_2", "02_USE_speed_and_dependence", None)
+
+
+# --------------------------------------------------------------------------- #
+# Exp03 — grok speed vs n (derived from exp01)
+# --------------------------------------------------------------------------- #
+def fig_exp03():
+    d = load_results("exp01")
+    if not d:
+        return
+    recs, agg = records_and_agg(list(d.values()),
+                                ["grok_epoch", "final_test_acc"], ["n"])
+    base = agg.get((0,), {}).get("grok_epoch")
+    fig, ax = plt.subplots(1, 2, figsize=(14, 4.6))
+    errbar_by(ax[0], agg, "grok_epoch", "tab:purple")
+    if base:
+        ax[0].axhline(base["mean"], ls=":", c="k", lw=.8,
+                      label=f"baseline {base['mean']:.0f}")
+        ax[0].legend()
+    ax[0].set(title="grok epoch vs #injected pairs (mean±std)",
+              xlabel="#injected pairs", ylabel="epoch")
+    xs, fracs = [], []
+    for (n,), a in sorted(agg.items()):
+        st = a["grok_epoch"]
+        xs.append(n); fracs.append((st["n"] if st else 0) / a["_n_runs"])
+    ax[1].bar(xs, fracs, color="tab:blue")
+    ax[1].set(title="fraction of seeds that grok (acc ≥ .99 within 30k)",
+              xlabel="#injected pairs", ylabel="fraction", ylim=(0, 1.05))
+    save(fig, "exp03", "01_MAIN_speed",
+         "Exp03 MAIN — grok speed and reliability vs #injected pairs (from exp01 grid)")
+
+
+# --------------------------------------------------------------------------- #
+# Exp04 — reliability × n
+# --------------------------------------------------------------------------- #
 def fig_exp04():
-    rels = [1.0, 0.75, 0.5, 0.25, 0.0]
-    R = {r: load("exp04", f"rel{r}") for r in rels}
-    # MAIN
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    ax[0].plot(rels, [R[r]["history"][-1]["test_acc"] for r in rels], "o-", c="tab:red"); ax[0].axhline(.99, ls=":", c="k")
-    ax[0].invert_xaxis(); ax[0].set(title="final test acc vs reliability", xlabel="reliability", ylabel="test acc")
-    ax[1].plot(rels, [fabl(R[r], "delta") for r in rels], "o-", c="tab:purple"); ax[1].axhline(0, c="k", lw=.8)
-    ax[1].invert_xaxis(); ax[1].set(title="ablation ΔCE (>0 used · <0 harmful)", xlabel="reliability", ylabel="ΔCE")
-    save(fig, "exp04", "01_MAIN_reliability", "Exp04 MAIN — below ~0.5 reliability the oracle becomes harmful noise")
-    # USE / VAL — W_E base vs other
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    base = [R[r]["snapshots"][-1]["we_freq_power_full"][16] for r in rels]
-    other = [max(p for k, p in enumerate(R[r]["snapshots"][-1]["we_freq_power_full"], 1) if k != 17) for r in rels]
-    ax[0].plot(rels, base, "o-", label="W_E @ base freq 17"); ax[0].plot(rels, other, "s-", label="W_E @ best other")
-    ax[0].invert_xaxis(); ax[0].set(title="model abandons oracle freq for its own", xlabel="reliability", ylabel="W_E power"); ax[0].legend()
-    ax[1].plot(rels, [fabl(R[r], "acc_on") for r in rels], "o-", label="oracle on")
-    ax[1].plot(rels, [fabl(R[r], "acc_off") for r in rels], "s--", label="oracle ablated")
-    ax[1].invert_xaxis(); ax[1].set(title="USE: off>on at low rel = oracle hurts", xlabel="reliability", ylabel="test acc"); ax[1].legend()
-    save(fig, "exp04", "02_USE_WE_and_ablation", "Exp04 USE — high rel used; low rel abandoned/harmful (caveat: single base freq)")
-    # VAL — curves
+    d = load_results("exp04")
+    if not d:
+        return
+    results = list(d.values())
+    recs, agg = records_and_agg(
+        results, ["final_test_acc", "ablation_delta", "we_power_injected",
+                  "grok_epoch"], ["rel", "n"])
+    rels = sorted({k[0] for k in agg}, reverse=True)
+    ns = sorted({k[1] for k in agg})
+    cols = colors_for(ns)
+
+    # MAIN — heatmap of final test acc (rel × n)
+    M = np.full((len(rels), len(ns)), np.nan)
+    for (rel, n), a in agg.items():
+        st = a["final_test_acc"]
+        if st:
+            M[rels.index(rel), ns.index(n)] = st["mean"]
+    fig, ax = plt.subplots(figsize=(8.5, 5))
+    im = ax.imshow(M, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
+    ax.set_xticks(range(len(ns)), [str(n) for n in ns])
+    ax.set_yticks(range(len(rels)), [f"{r:g}" for r in rels])
+    ax.set(xlabel="#injected pairs", ylabel="reliability")
+    for i in range(len(rels)):
+        for j in range(len(ns)):
+            if not np.isnan(M[i, j]):
+                ax.text(j, i, f"{M[i, j]:.2f}", ha="center", va="center",
+                        fontsize=9)
+    fig.colorbar(im, label="final test acc (seed mean)")
+    save(fig, "exp04", "01_MAIN_acc_heatmap",
+         "Exp04 MAIN — final test acc vs (reliability × #pairs)")
+
+    # USE — ablation ΔCE vs reliability, per n
+    fig, ax = plt.subplots(1, 2, figsize=(14, 4.6))
+    for n in ns:
+        xs, mus, sds = [], [], []
+        for rel in rels:
+            st = (agg.get((rel, n)) or {}).get("ablation_delta")
+            if st:
+                xs.append(rel); mus.append(st["mean"]); sds.append(st["std"])
+        ax[0].errorbar(xs, mus, yerr=sds, fmt="o-", color=cols[n], capsize=3,
+                       label=f"n={n}")
+        xs, mus, sds = [], [], []
+        for rel in rels:
+            st = (agg.get((rel, n)) or {}).get("we_power_injected")
+            if st:
+                xs.append(rel); mus.append(st["mean"]); sds.append(st["std"])
+        ax[1].errorbar(xs, mus, yerr=sds, fmt="s--", color=cols[n], capsize=3,
+                       label=f"n={n}")
+    for a in ax:
+        a.invert_xaxis(); a.legend(ncols=2)
+    ax[0].axhline(0, c="k", lw=.8)
+    ax[0].set(title="ablation ΔCE (>0 used · <0 harmful)", xlabel="reliability",
+              ylabel="ΔCE")
+    ax[1].set(title="W_E power @ base freqs", xlabel="reliability",
+              ylabel="power")
+    save(fig, "exp04", "02_USE_vs_reliability",
+         "Exp04 USE — unreliable features flip from used to harmful")
+
+    # VALIDATION — training curves at canonical n=2
     fig, ax = plt.subplots(figsize=(10, 5))
-    for r in rels:
-        ep, v = H(R[r], "test_acc"); ax.plot(ep, v, label=f"rel={r}")
-    ax.set(title="Exp04 VALIDATION — test acc by reliability", xlabel="epoch", ylabel="test acc"); ax.legend()
-    save(fig, "exp04", "03_VAL_curves", None)
+    rcols = colors_for(rels, "plasma")
+    for rel in rels:
+        runs = [r for r in results
+                if axes_of(r).get("rel") == rel and axes_of(r).get("n") == 2]
+        if runs:
+            e, m = history_stack(runs, "test_acc")
+            band(ax, e, m, rcols[rel], f"rel={rel:g}")
+    ax.set(title="test acc by reliability (n=2, mean±std over seeds)",
+           xlabel="epoch", ylabel="test acc")
+    ax.legend()
+    save(fig, "exp04", "03_VAL_curves_n2", None)
 
 
-# %% Exp05 — answer hint
+# --------------------------------------------------------------------------- #
+# Exp05 — answer hints
+# --------------------------------------------------------------------------- #
 def fig_exp05():
-    cfgs = ["baseline", "hint_mod10_onehot", "hint_div10_onehot", "hint_mod10_fourier"]
-    cols = ["tab:blue", "tab:red", "tab:orange", "tab:green"]
-    R = {c: load("exp05", c) for c in cfgs}
-    # MAIN
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-    nkf = [len(R[c]["snapshots"][-1]["key_freqs"]) for c in cfgs]
-    ax[0].bar(range(len(cfgs)), nkf, color=cols); ax[0].axhline(nkf[0], ls=":", c="k", label="baseline")
-    ax[0].set_xticks(range(len(cfgs))); ax[0].set_xticklabels(cfgs, rotation=20, ha="right")
-    ax[0].set(title="# key freqs (hypothesis: FEWER → refuted)", ylabel="#key freqs"); ax[0].legend()
-    ax[1].bar(range(len(cfgs)), [R[c]["grok_epoch"] or np.nan for c in cfgs], color=cols)
-    ax[1].set_xticks(range(len(cfgs))); ax[1].set_xticklabels(cfgs, rotation=20, ha="right")
-    ax[1].set(title="grok epoch (hints grok SLOWER)", ylabel="grok epoch")
-    save(fig, "exp05", "01_MAIN_keyfreqs_grok", "Exp05 MAIN — weak answer hints do NOT reduce freq count; slow grokking")
-    # USE — ablation
-    fig, ax = plt.subplots(figsize=(9, 5))
-    hints = cfgs[1:]
-    xs = np.arange(len(hints))
-    ax.bar(xs - .2, [fabl(R[c], "acc_on") for c in hints], .4, label="hint on")
-    ax.bar(xs + .2, [fabl(R[c], "acc_off") for c in hints], .4, label="hint ablated")
-    ax.set_xticks(xs); ax.set_xticklabels(hints, rotation=15, ha="right")
-    ax.set(title="hints ARE used (big acc drop when ablated)", ylabel="test acc"); ax.legend()
-    save(fig, "exp05", "02_USE_ablation", "Exp05 USE — the answer hint is load-bearing, but it doesn't simplify the freq circuit")
-    # VAL — spectra
-    fig, ax = plt.subplots(figsize=(11, 4.5))
-    for c, col in zip(cfgs, cols):
-        ax.plot(FR, spec(R[c]), col, label=c, alpha=.7)
-    ax.set(title="Exp05 VALIDATION — hint models still build a full frequency set", xlabel="freq", ylabel="W_E power"); ax.legend()
-    save(fig, "exp05", "03_VAL_WE_spectrum", None)
+    d = load_results("exp05")
+    if not d:
+        return
+    results = list(d.values())
+    byh = group_by(results, "hint")
+    recs, agg = records_and_agg(
+        results, ["grok_epoch", "final_test_acc", "n_key_freqs",
+                  "ablation_delta"], ["hint"])
+    names = [k[0] for k in agg]
+    cols = colors_for(names, "tab10")
+
+    fig, ax = plt.subplots(1, 3, figsize=(17, 4.8))
+    panels = [("grok_epoch", "grok epoch", 0),
+              ("n_key_freqs", "#key freqs (fewer = simpler circuit?)", 1),
+              ("ablation_delta", "ablation ΔCE (hint load-bearing?)", 2)]
+    for key, title, i in panels:
+        xs, mus, sds = [], [], []
+        for name in names:
+            st = agg[(name,)][key]
+            xs.append(name)
+            mus.append(st["mean"] if st else np.nan)
+            sds.append(st["std"] if st else 0)
+        ax[i].bar(range(len(xs)), mus, yerr=sds, capsize=4,
+                  color=[cols[x] for x in xs])
+        ax[i].set_xticks(range(len(xs)), xs, rotation=20, ha="right")
+        ax[i].set_title(title)
+    ax[2].axhline(0, c="k", lw=.8)
+    save(fig, "exp05", "01_MAIN_hints",
+         "Exp05 MAIN — weak answer hints: speed, circuit size, causal use (mean±std)")
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for (name,), runs in byh.items():
+        e, m = history_stack(runs, "test_acc")
+        band(ax, e, m, cols[name], name)
+    ax.axhline(.99, ls=":", c="k", lw=.8)
+    ax.set(title="test acc by hint config (mean±std over seeds)",
+           xlabel="epoch", ylabel="test acc")
+    ax.legend()
+    save(fig, "exp05", "02_VAL_curves", None)
 
 
-# %% run all
-if __name__ == "__main__":
-    for fn in [fig_global, fig_exp01, fig_exp02, fig_exp06, fig_exp04, fig_exp05]:
-        print(fn.__name__)
+# --------------------------------------------------------------------------- #
+def main():
+    figs = [f for n, f in sorted(globals().items()) if n.startswith("fig_")]
+    for f in figs:
         try:
-            fn()
-        except Exception as e:
-            import traceback; traceback.print_exc()
-            print(f"  !! {fn.__name__} FAILED: {type(e).__name__}: {e}")
-    print("\nAll figures under", FIG)
+            f()
+        except Exception as e:  # noqa: BLE001 — keep rendering the rest
+            print(f"  !! {f.__name__} failed: {e}")
+
+
+# %% render everything available
+if __name__ == "__main__" or "ipykernel" in sys.modules:
+    main()
+    print("done")

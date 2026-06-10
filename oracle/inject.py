@@ -139,6 +139,43 @@ def make_perexample_freq_oracle(config: transformer.Config, freq_map, amp: float
     return fn
 
 
+def make_perexample_multifreq_oracle(config: transformer.Config, freq_maps,
+                                     amp: float = 1.0, dims=None, device=None):
+    """n independent per-example frequency maps; pair k uses dims (2k, 2k+1).
+
+    Generalizes `make_perexample_freq_oracle` to multiple cos/sin pairs: example
+    (i, j) gets, for each map k with frequency w = freq_maps[k][i, j],
+    ``amp*[cos(w i), sin(w i)]`` at position 0 and the same in j at position 1.
+    The full-grid lookup table (p, p, n_ctx, d_model) is precomputed once, so
+    the per-step cost is a single gather instead of trig on every forward.
+    """
+    p, d_model, n_ctx = config.p, config.d_model, config.n_ctx
+    device = device or config.device
+    fms = [_freq_map_to_tensor(fm, p, device) for fm in freq_maps]
+    n = len(fms)
+    if dims is None:
+        dims = list(range(2 * n))
+    assert len(dims) == 2 * n, "need exactly 2 dims (cos, sin) per map"
+    assert max(dims) < d_model, "oracle dims exceed d_model"
+
+    ii = t.arange(p, device=device).view(p, 1).expand(p, p).to(t.float32)
+    jj = t.arange(p, device=device).view(1, p).expand(p, p).to(t.float32)
+    table = t.zeros(p, p, n_ctx, d_model, device=device)
+    for k, fm in enumerate(fms):
+        w = 2 * math.pi * fm.to(t.float32) / p                  # (p, p)
+        table[:, :, 0, dims[2 * k]] = amp * t.cos(w * ii)
+        table[:, :, 0, dims[2 * k + 1]] = amp * t.sin(w * ii)
+        table[:, :, 1, dims[2 * k]] = amp * t.cos(w * jj)
+        table[:, :, 1, dims[2 * k + 1]] = amp * t.sin(w * jj)
+
+    def fn(x):
+        return table[x[..., 0], x[..., 1]]                      # (batch, n_ctx, d_model)
+
+    fn.freq_maps, fn.dims, fn.amp = fms, dims, amp
+    fn.kind = "perexample_multifreq"
+    return fn
+
+
 def freq_map_reliable(config, base_freq: int):
     """(p, p) map that is constant `base_freq` everywhere (perfectly reliable)."""
     p = config.p
