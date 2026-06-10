@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Exp 05 — Weakly-informative answer hint
 # Inject a weak feature about the answer c=(i+j) mod p at the "=" position
-# (c % 10 or c // 10). Does the model then solve the task with FEWER frequencies?
+# (c % 10 or c // 10). Does the model then solve the task with fewer frequencies?
 # Compare #key_freqs (and uptake) of hinted models vs a no-hint baseline.
 
 # %% imports + path bootstrap

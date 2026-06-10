@@ -1,10 +1,15 @@
-"""Fast, reproducible, wandb-free training harness for oracle experiments.
+"""Fast, reproducible training harness for oracle experiments.
 
 Why not reuse `transformer.Trainer`? It rebuilds the labels with a Python list
-comprehension on every `full_loss` call (the dominant cost) and is coupled to
-wandb. Here we precompute all tensors once and log to JSONL, so a 30k-epoch
-p=113 run takes well under a couple of minutes on the 4090, and many experiments
-can run back-to-back.
+comprehension on every `full_loss` call (the dominant cost). Here we precompute
+all tensors once, so a 30k-epoch p=113 run takes well under a couple of minutes
+on the 4090, and many experiments can run back-to-back.
+
+Logging: every `train()` call is its own wandb run (project `oracle-encodings`,
+grouped by experiment) with scalars logged at `step=epoch` so charts populate
+live. JSONL + result.json files are written alongside as the source of truth
+for `make_figures.py`; wandb is the monitoring/comparison layer. Set
+`use_wandb=False` (or env `WANDB_MODE=disabled`) for offline/smoke usage.
 
 Reproducibility: `setup()` mirrors `Trainer.__init__` order exactly
 (set_seed -> build model -> gen_train_test), so a given Config + seed trains the
@@ -18,9 +23,12 @@ import time
 import numpy as np
 import torch as t
 import torch.optim as optim
+import wandb
 
 from modular_addition import transformer, helpers
 from modular_addition.oracle.inject import OracleTransformer
+
+WANDB_PROJECT = os.environ.get("WANDB_PROJECT", "oracle-encodings")
 
 
 # --------------------------------------------------------------------------- #
@@ -76,16 +84,40 @@ def evaluate(model, data, config, epoch):
 # --------------------------------------------------------------------------- #
 # Train
 # --------------------------------------------------------------------------- #
+def _wandb_init(use_wandb, label, config, *, group=None, extra_config=None,
+                inject_from_epoch=0, num_epochs=None):
+    """Start a wandb run for this training run; returns the run or None.
+
+    Never raises: experiments must survive a missing login / offline laptop.
+    """
+    if not use_wandb or os.environ.get("WANDB_MODE") == "disabled":
+        return None
+    try:
+        wcfg = _config_dict(config)
+        wcfg.update(dict(label=label, inject_from_epoch=inject_from_epoch,
+                         num_epochs=num_epochs))
+        wcfg.update(extra_config or {})
+        return wandb.init(project=WANDB_PROJECT, group=group, name=label,
+                          config=wcfg, reinit=True)
+    except Exception as e:  # noqa: BLE001 — wandb failure must not kill a sweep
+        print(f"[{label}] wandb.init failed ({e}); continuing without wandb")
+        return None
+
+
 def train(config: transformer.Config, model, data, *, num_epochs,
           eval_every=100, snapshot_every=2000, snapshot_fn=None,
           inject_from_epoch=0, run_dir=None, label="run",
-          grok_acc=0.99, stop_after_grok=None, verbose=True):
+          grok_acc=0.99, stop_after_grok=None, verbose=True,
+          use_wandb=True, wandb_group=None, wandb_config=None):
     """Train `model` full-batch; log scalars every `eval_every`, heavy uptake
     metrics every `snapshot_every` (via `snapshot_fn(model, epoch)`).
 
     `inject_from_epoch` gates the oracle on at that epoch (delayed injection).
     `stop_after_grok`: if set, stop this many epochs after the first epoch with
-    test_acc >= grok_acc (saves time once grokking is clearly complete).
+    test_acc >= grok_acc (off by default — experiments train to num_epochs).
+    Scalars go to wandb (`step=epoch`, so charts populate live) and to JSONL;
+    `wandb_group` should be the experiment name, `wandb_config` any sweep axes
+    (n, seed, amp, ...) you want filterable in the wandb UI.
     Returns dict(history, snapshots, grok_epoch, label, config).
     """
     opt = optim.AdamW(model.parameters(), lr=config.lr,
@@ -98,48 +130,56 @@ def train(config: transformer.Config, model, data, *, num_epochs,
     if run_dir is not None:
         os.makedirs(run_dir, exist_ok=True)
         jsonl = open(os.path.join(run_dir, f"{label}.jsonl"), "w")
+    wrun = _wandb_init(use_wandb, label, config, group=wandb_group,
+                       extra_config=wandb_config,
+                       inject_from_epoch=inject_from_epoch, num_epochs=num_epochs)
 
     has_oracle = getattr(model, "oracle_fn", None) is not None
     t0 = time.time()
-    for epoch in range(num_epochs):
-        if has_oracle:
-            model.inject = epoch >= inject_from_epoch
+    try:
+        for epoch in range(num_epochs):
+            if has_oracle:
+                model.inject = epoch >= inject_from_epoch
 
-        logits = model(data["train_x"])[:, -1]
-        loss = helpers.cross_entropy_high_precision(logits, data["train_y"])
-        loss.backward()
-        opt.step()
-        sched.step()
-        opt.zero_grad()
+            logits = model(data["train_x"])[:, -1]
+            loss = helpers.cross_entropy_high_precision(logits, data["train_y"])
+            loss.backward()
+            opt.step()
+            sched.step()
+            opt.zero_grad()
 
-        final_epoch = epoch == num_epochs - 1
-        stopping = (stop_after_grok is not None and grok_epoch is not None
-                    and epoch >= grok_epoch + stop_after_grok)
-        if epoch % eval_every == 0 or final_epoch or stopping:
-            rec = evaluate(model, data, config, epoch)
-            rec["lr"] = sched.get_last_lr()[0]
-            rec["wall_s"] = round(time.time() - t0, 2)
-            history.append(rec)
-            if jsonl:
-                jsonl.write(json.dumps(rec) + "\n"); jsonl.flush()
-            if grok_epoch is None and rec["test_acc"] >= grok_acc:
-                grok_epoch = epoch
-            if verbose and (epoch % (eval_every * 10) == 0 or final_epoch or stopping):
-                print(f"[{label}] ep {epoch:6d}  "
-                      f"train {rec['train_loss']:.4f}/{rec['train_acc']:.3f}  "
-                      f"test {rec['test_loss']:.4f}/{rec['test_acc']:.3f}  "
-                      f"|W_E| {rec['we_norm']:.2f}  inj={rec['injecting']}")
+            final_epoch = epoch == num_epochs - 1
+            stopping = (stop_after_grok is not None and grok_epoch is not None
+                        and epoch >= grok_epoch + stop_after_grok)
+            if epoch % eval_every == 0 or final_epoch or stopping:
+                rec = evaluate(model, data, config, epoch)
+                rec["lr"] = float(sched.get_last_lr()[0])
+                rec["wall_s"] = round(time.time() - t0, 2)
+                history.append(rec)
+                if jsonl:
+                    jsonl.write(json.dumps(rec) + "\n"); jsonl.flush()
+                if wrun:
+                    wrun.log(rec, step=epoch)
+                if grok_epoch is None and rec["test_acc"] >= grok_acc:
+                    grok_epoch = epoch
+                if verbose and (epoch % (eval_every * 10) == 0 or final_epoch or stopping):
+                    print(f"[{label}] ep {epoch:6d}  "
+                          f"train {rec['train_loss']:.4f}/{rec['train_acc']:.3f}  "
+                          f"test {rec['test_loss']:.4f}/{rec['test_acc']:.3f}  "
+                          f"|W_E| {rec['we_norm']:.2f}  inj={rec['injecting']}")
 
-        if snapshot_fn is not None and (epoch % snapshot_every == 0 or final_epoch or stopping):
-            snap = snapshot_fn(model, epoch)
-            snap["epoch"] = epoch
-            snapshots.append(snap)
+            if snapshot_fn is not None and (epoch % snapshot_every == 0 or final_epoch or stopping):
+                snap = snapshot_fn(model, epoch)
+                snap["epoch"] = epoch
+                snapshots.append(snap)
+                if wrun:
+                    wrun.log(_snapshot_scalars(snap), step=epoch)
 
-        if stopping:
-            break
-
-    if jsonl:
-        jsonl.close()
+            if stopping:
+                break
+    finally:
+        if jsonl:
+            jsonl.close()
 
     result = dict(history=history, snapshots=snapshots, grok_epoch=grok_epoch,
                   label=label, num_epochs=num_epochs,
@@ -148,9 +188,36 @@ def train(config: transformer.Config, model, data, *, num_epochs,
     if run_dir is not None:
         with open(os.path.join(run_dir, f"{label}.result.json"), "w") as f:
             json.dump(result, f, indent=2, default=_json_default)
+    if wrun:
+        wrun.summary["grok_epoch"] = grok_epoch
+        wrun.summary["final_test_acc"] = history[-1]["test_acc"] if history else None
+        wrun.finish()
     if verbose:
         print(f"[{label}] done in {result['wall_s']}s  grok_epoch={grok_epoch}")
     return result
+
+
+def _snapshot_scalars(snap):
+    """Flatten a snapshot to wandb-loggable scalars (skip lists/specs).
+
+    Sums per-frequency lists (excluded loss, W_E power, logit coeffs at the
+    injected freqs) into single trackable scalars; nested ablation dict becomes
+    `snap/ablation_*`.
+    """
+    out = {}
+    for k, v in snap.items():
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            out[f"snap/{k}"] = v
+        elif isinstance(v, list) and v and all(isinstance(x, (int, float)) for x in v):
+            if k in ("key_freqs", "injected_freqs", "injected_in_key_freqs"):
+                out[f"snap/{k}_count"] = len(v)
+            else:
+                out[f"snap/{k}_sum"] = float(sum(v))
+        elif isinstance(v, dict):
+            for kk, vv in v.items():
+                if isinstance(vv, (int, float)) and not isinstance(vv, bool):
+                    out[f"snap/{k}_{kk}"] = vv
+    return out
 
 
 def _config_dict(config):
