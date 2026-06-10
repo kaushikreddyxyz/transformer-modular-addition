@@ -109,13 +109,18 @@ def main():
             for i, s in enumerate(specs)]
 
     import multiprocessing as mp
+    from tqdm.auto import tqdm
     ctx = mp.get_context("spawn")
     t0, ok, fail = time.time(), 0, 0
+    bar = tqdm(total=len(jobs), desc="sweep", unit="run", smoothing=0.05)
     with ctx.Pool(processes=args.workers) as pool:
         for exp, label, status, info in pool.imap_unordered(_worker, jobs):
             ok += status == "ok"
             fail += status != "ok"
-            print(f"[{ok + fail:>4}/{len(jobs)}] {exp}/{label}: {status} ({info})")
+            bar.update(1)
+            bar.set_postfix(ok=ok, fail=fail)
+            tqdm.write(f"[{ok + fail:>4}/{len(jobs)}] {exp}/{label}: {status} ({info})")
+    bar.close()
     print(f"\ndone in {(time.time() - t0) / 3600:.2f}h — {ok} ok, {fail} failed")
     if fail:
         sys.exit(1)

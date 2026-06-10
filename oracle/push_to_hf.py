@@ -22,6 +22,7 @@ Usage:
   python -m modular_addition.oracle.push_to_hf --repo me/my-checkpoints --root path/
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -32,7 +33,10 @@ except NameError:
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-DEFAULT_ROOT = Path(__file__).resolve().parent / "results"
+# Same resolution as sweep.RESULTS_DIR (duplicated here so this script stays
+# importable without torch): fresh sweep output, overridable via env.
+DEFAULT_ROOT = Path(os.environ.get("ORACLE_RESULTS_DIR")
+                    or Path(__file__).resolve().parent / "results")
 DEFAULT_REPO_NAME = "oracle-encodings-checkpoints"
 INCLUDE_SUFFIXES = (".pth",)
 INCLUDE_NAMES = ("summary.json",)

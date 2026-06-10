@@ -58,6 +58,19 @@ Faster options:
 CPU matters: each worker burns ~1–2 cores on Python/launch overhead
 (`OMP_NUM_THREADS=2` is set per worker). Don't run 10 workers on 4 vCPUs.
 
+## Output & progress
+
+Everything a sweep produces lands in one fresh directory,
+`modular_addition/oracle/results/` (created on first run; the pre-sweep
+single-seed data is archived in `results_legacy/`): per-run JSONL +
+result.json, `checkpoints/<label>/*.pth`, per-experiment `summary.json`, and
+`figures/` once make_figures runs. Set `ORACLE_RESULTS_DIR=/scratch/...` to
+redirect all of it (runner, figures, and push_to_hf follow the same variable).
+
+Progress: the runner shows a tqdm bar over all runs (ETA, ok/fail counts) plus
+one completion line per run; per-epoch bars appear in sequential/verbose mode
+(experiment files run directly). wandb charts update live per run either way.
+
 ## Other resources
 
 - **Disk:** checkpoints ≈ 9 × 1 MB × 308 + 9 × 3.6 MB × 48 ≈ **4.5 GB**, plus

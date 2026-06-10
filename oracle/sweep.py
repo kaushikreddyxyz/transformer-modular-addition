@@ -28,7 +28,11 @@ EVAL_EVERY = 200
 SNAPSHOT_EVERY = 2000
 AMP_DEFAULT = 1.0
 
-RESULTS_DIR = Path(__file__).resolve().parent / "results"
+# Fresh sweep output lands here (created on first run); pre-sweep results were
+# archived to results_legacy/. Override with ORACLE_RESULTS_DIR (e.g. scratch
+# disk on a rented GPU box) — make_figures and push_to_hf follow it too.
+RESULTS_DIR = Path(os.environ.get("ORACLE_RESULTS_DIR")
+                   or Path(__file__).resolve().parent / "results")
 
 # Canonical p=113 frequency pool. Prefixes are nested (n=2 ⊂ n=3 ⊂ ...) so the
 # n-sweep compares supersets; the first two are exp01's historical [17, 34].
@@ -173,8 +177,13 @@ def execute(s, device=None, use_wandb=True, force=False, verbose=True):
 
 def run_all(specs, use_wandb=True, force=False, verbose=True):
     """Sequential fallback executor (notebook cells / single GPU)."""
-    return [execute(s, use_wandb=use_wandb, force=force, verbose=verbose)
-            for s in specs]
+    from tqdm.auto import tqdm
+    out = []
+    grid = tqdm(specs, desc="grid", unit="run", disable=len(specs) < 2)
+    for s in grid:
+        grid.set_postfix_str(f"{s['exp']}/{s['label']}")
+        out.append(execute(s, use_wandb=use_wandb, force=force, verbose=verbose))
+    return out
 
 
 # --------------------------------------------------------------------------- #

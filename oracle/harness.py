@@ -24,6 +24,7 @@ import numpy as np
 import torch as t
 import torch.optim as optim
 import wandb
+from tqdm.auto import tqdm
 
 from modular_addition import transformer, helpers
 from modular_addition.oracle.inject import OracleTransformer
@@ -145,9 +146,14 @@ def train(config: transformer.Config, model, data, *, num_epochs,
 
     has_oracle = getattr(model, "oracle_fn", None) is not None
     ckpt_set = set(ckpt_epochs or ())
+    # Per-epoch progress bar in verbose (sequential) mode; pool workers run
+    # with verbose=False and report through the runner's run-level bar instead.
+    pbar = tqdm(range(num_epochs), desc=label, unit="ep", miniters=500,
+                mininterval=0) if verbose else None
+    epochs = pbar if pbar is not None else range(num_epochs)
     t0 = time.time()
     try:
-        for epoch in range(num_epochs):
+        for epoch in epochs:
             if has_oracle:
                 model.inject = epoch >= inject_from_epoch
 
@@ -176,11 +182,11 @@ def train(config: transformer.Config, model, data, *, num_epochs,
                     wrun.log(rec, step=epoch)
                 if grok_epoch is None and rec["test_acc"] >= grok_acc:
                     grok_epoch = epoch
-                if verbose and (epoch % (eval_every * 10) == 0 or final_epoch or stopping):
-                    print(f"[{label}] ep {epoch:6d}  "
-                          f"train {rec['train_loss']:.4f}/{rec['train_acc']:.3f}  "
-                          f"test {rec['test_loss']:.4f}/{rec['test_acc']:.3f}  "
-                          f"|W_E| {rec['we_norm']:.2f}  inj={rec['injecting']}")
+                if pbar is not None:
+                    pbar.set_postfix(train=f"{rec['train_loss']:.4f}",
+                                     test=f"{rec['test_loss']:.4f}",
+                                     acc=f"{rec['test_acc']:.3f}",
+                                     grok=grok_epoch)
 
             if snapshot_fn is not None and (epoch % snapshot_every == 0 or final_epoch or stopping):
                 snap = snapshot_fn(model, epoch)
@@ -192,6 +198,8 @@ def train(config: transformer.Config, model, data, *, num_epochs,
             if stopping:
                 break
     finally:
+        if pbar is not None:
+            pbar.close()
         if jsonl:
             jsonl.close()
 
