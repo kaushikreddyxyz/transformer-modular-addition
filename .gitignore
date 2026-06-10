@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# wandb run artifacts
+wandb/
+
+# HFTrainer outputs
+hf_runs/
+
+# local Trainer checkpoints (helpers.root = ./saved_runs)
+saved_runs/
+
+.DS_Store

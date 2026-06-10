@@ -27,7 +27,9 @@ print(f"Using device: {device}")
 config = dataclasses.replace(
     transformer.Config(num_epochs=20_000),
     device=device,
+    save_models=True,
 )
+helpers.set_seed(config.seed)
 
 # %% PART 1 — local Trainer (grokking paper)
 trainer = transformer.Trainer(config)
@@ -39,7 +41,7 @@ trainer.initial_save_if_appropriate()
 wandb.define_metric("epoch")
 wandb.define_metric("*", step_metric="epoch")
 
-pbar = tqdm(range(config.num_epochs), desc="grokking-local", mininterval=0.5)
+pbar = tqdm(range(config.num_epochs), desc="grokking-local", miniters=500, mininterval=0)
 for epoch in pbar:
     train_loss, test_loss = trainer.do_a_training_step(epoch)
     wandb.log({
@@ -59,15 +61,21 @@ for epoch in pbar:
     if test_loss.item() < config.stopping_thresh:
         break
 
-trainer.post_training_save()
+# log_to_wandb=False: the in-Trainer wandb.log(save_dict) tries to push raw
+# tensor state_dicts through the scalar-metric API and raises an exception,
+# which the cell-based workflow swallows silently — wandb's heartbeat then times
+# out and marks the run as "crashed" even though training completed. We push
+# the checkpoint as a proper Artifact below instead.
+trainer.post_training_save(log_to_wandb=False)
 
-# Upload the final checkpoint as a proper wandb Artifact (downloadable from the
-# UI). The Trainer's own wandb.log(state_dict) in post_training_save tries to push
-# raw tensors through the scalar-metric API and doesn't render usefully.
 final_pth = helpers.root / trainer.run_name / "final.pth"
 artifact = wandb.Artifact(name=trainer.run_name, type="model")
 artifact.add_file(str(final_pth))
 wandb.log_artifact(artifact)
+
+# Explicit finish so wandb gets a clean termination signal even in cell-based
+# workflows where the kernel stays alive (atexit wouldn't fire).
+wandb.finish()
 
 # # %% PART 2 — HuggingFace Trainer
 # # Close the wandb run opened by the local Trainer so HFTrainer can start its own.

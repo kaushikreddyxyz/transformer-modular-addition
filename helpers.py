@@ -9,7 +9,7 @@ __all__ = ['use_drive', 'root', 'imshow', 'imshow_div', 'run_shell_command_as_py
            'normalize', 'extract_freq_2d', 'get_cov', 'is_close', 'cpu_aware_load_at_root',
            'load_mod_addition_frac_train_sweep', 'load_5_digit_addition_infinite', 'load_5_digit_addition_finite',
            'load_induction_head_finite', 'load_induction_head_infinite', 'load_infinite_data_losses',
-           'load_finite_data_losses', 'load_no_wd_width_scan']
+           'load_finite_data_losses', 'load_no_wd_width_scan', 'set_seed']
 
 # %% ../helpers.ipynb 2
 def run_shell_command_as_python(shell):
@@ -73,6 +73,29 @@ import itertools
 
 # %% ../helpers.ipynb 7
 root = Path('./saved_runs')
+
+
+def set_seed(seed: int = 0, deterministic: bool = True):
+    """Seed python/numpy/torch RNGs so a given Config trains the same model.
+
+    Covers all RNG sources in this codebase: torch.randn (weight init),
+    random.shuffle (gen_train_test), np.random.randint (Config.random_answers
+    for fn_name='rand'). With deterministic=True, also enables torch's
+    deterministic-algorithm mode (warn_only=True so MPS ops without a
+    deterministic kernel warn instead of hard-erroring).
+
+    Call BEFORE model construction or data shuffling.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    if deterministic:
+        torch.use_deterministic_algorithms(True, warn_only=True)
 
 #| export
 def download_model_from_drive():

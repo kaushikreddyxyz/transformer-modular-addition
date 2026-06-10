@@ -466,6 +466,7 @@ class Trainer:
     '''
 
     def __init__(self, config : Config, model = None) -> None:
+        helpers.set_seed(config.seed)
         self.run_name = f"grok_{int(time.time())}"
         wandb.init(project = "grokking", config = dataclasses.asdict(config), name = self.run_name)
         self.model = model if model is not None else Transformer(config, use_cache=False)
