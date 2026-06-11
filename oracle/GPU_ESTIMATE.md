@@ -33,10 +33,25 @@ run is bound by kernel-launch overhead, not compute. Independent processes
 (the runner uses spawn — one CUDA context each) interleave kernels and scale
 close to linearly until SM occupancy or VRAM runs out.
 
-Per-worker VRAM (weights + grads + Adam states + full-batch activations):
+Per-worker VRAM (weights + grads + Adam states + full-batch activations;
+uptake snapshots add a transient that is freed back to the driver afterwards):
 
-- small run: ~0.3–0.5 GB
-- exp06 run: ~1.5–2.5 GB
+- small run: ~0.4–0.6 GB
+- exp06 run: ~1 GB steady, ~2–2.5 GB briefly during a snapshot
+
+Do not remove the memory hygiene that makes these numbers true: snapshots run
+under `no_grad` with chunked grid forwards and a targeted MLP hook
+(`analysis._mlp_post_acts`), logit coefficients are computed per-frequency
+(`analysis._coefficients_lowmem` — the upstream vectorized version
+materializes a (p//2, p, p, p) cube, ~8 GB at p=211, which OOM'd multi-worker
+sweeps), `empty_cache` runs after snapshots/specs, and the runner sets
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+
+Reading nvidia-smi: "GPU-Util" is the fraction of time *any* kernel is
+resident, not SM occupancy — one tiny run can show ~99% while using a sliver
+of the chip (that's why concurrent workers still scale). Long ~30% stretches
+are snapshot windows (launch-bound analysis ops). VRAM% reflects what the
+caching allocators have *reserved*, which sits above live usage.
 
 ## Recommended specs
 

@@ -36,6 +36,10 @@ import os
 # spawned workers: required for CUDA determinism (helpers.set_seed enables
 # torch.use_deterministic_algorithms).
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+# Workers are long-lived and train many different model shapes back-to-back;
+# expandable segments lets the caching allocator grow/shrink without
+# fragmenting, which is what turns "plenty of free VRAM" into OOM.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import argparse
 import importlib
@@ -102,6 +106,13 @@ def _worker(args):
                 f"grok={ge} {time.time() - t0:.0f}s")
     except Exception as e:  # noqa: BLE001 — one failed run must not kill the sweep
         return (spec["exp"], spec["label"], "FAIL", repr(e))
+    finally:
+        # Hand freed blocks back to the driver between specs so concurrent
+        # workers can use them (the allocator otherwise keeps this process's
+        # peak reserved forever).
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def _point_latest(run_dir):
