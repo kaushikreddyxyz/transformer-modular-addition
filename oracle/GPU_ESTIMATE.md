@@ -93,7 +93,9 @@ Progress: the runner prints the model count per experiment up front, then a
 tqdm bar over all models (ETA + trained/skipped/failed counts) with one
 completion line per model — equally informative for 1 model or 356. Per-epoch
 bars appear in sequential/verbose mode (experiment files run directly). wandb
-charts update live per run either way.
+charts update live per run either way; its console banner/summary is silenced
+(harness sets `WANDB_SILENT=true` — chatter goes to `wandb/run-*/logs/debug.log`,
+verbose mode still prints each run's URL; export `WANDB_SILENT=false` to undo).
 
 ## Other resources
 

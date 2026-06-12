@@ -30,6 +30,11 @@ from modular_addition import transformer, helpers
 from modular_addition.oracle.inject import OracleTransformer
 
 WANDB_PROJECT = os.environ.get("WANDB_PROJECT", "oracle-encodings")
+# wandb's default init banner + finish summary (~15 lines per run × 356 runs)
+# drowns the runner's progress bar. Silent mode redirects all of it to
+# wandb/run-*/logs/debug.log; metrics still sync to the web UI unchanged.
+# Export WANDB_SILENT=false to get the chatty console back.
+os.environ.setdefault("WANDB_SILENT", "true")
 
 # "Model after N epochs of training" — saved when epoch+1 == N, so 30000 is the
 # fully-trained model under the default num_epochs=30_000.
@@ -90,10 +95,12 @@ def evaluate(model, data, config, epoch):
 # Train
 # --------------------------------------------------------------------------- #
 def _wandb_init(use_wandb, label, config, *, group=None, extra_config=None,
-                inject_from_epoch=0, num_epochs=None):
+                inject_from_epoch=0, num_epochs=None, verbose=True):
     """Start a wandb run for this training run; returns the run or None.
 
-    Never raises: experiments must survive a missing login / offline laptop.
+    Console-quiet (WANDB_SILENT above); in verbose mode prints the run URL as
+    the single line of wandb output. Never raises: experiments must survive a
+    missing login / offline laptop.
     """
     if not use_wandb or os.environ.get("WANDB_MODE") == "disabled":
         return None
@@ -103,8 +110,11 @@ def _wandb_init(use_wandb, label, config, *, group=None, extra_config=None,
                          num_epochs=num_epochs))
         wcfg.update(extra_config or {})
         name = f"{group}/{label}" if group else label
-        return wandb.init(project=WANDB_PROJECT, group=group, name=name,
-                          config=wcfg, reinit=True)
+        run = wandb.init(project=WANDB_PROJECT, group=group, name=name,
+                         config=wcfg, reinit=True)
+        if verbose and getattr(run, "url", None):
+            print(f"[{label}] wandb → {run.url}")
+        return run
     except Exception as e:  # noqa: BLE001 — wandb failure must not kill a sweep
         print(f"[{label}] wandb.init failed ({e}); continuing without wandb")
         return None
@@ -142,7 +152,8 @@ def train(config: transformer.Config, model, data, *, num_epochs,
         jsonl = open(os.path.join(run_dir, f"{label}.jsonl"), "w")
     wrun = _wandb_init(use_wandb, label, config, group=wandb_group,
                        extra_config=wandb_config,
-                       inject_from_epoch=inject_from_epoch, num_epochs=num_epochs)
+                       inject_from_epoch=inject_from_epoch,
+                       num_epochs=num_epochs, verbose=verbose)
 
     has_oracle = getattr(model, "oracle_fn", None) is not None
     ckpt_set = set(ckpt_epochs or ())
