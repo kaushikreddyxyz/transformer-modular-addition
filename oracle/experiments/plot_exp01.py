@@ -20,6 +20,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from plot_common import caption  # noqa: E402
+
 RES = Path(sys.argv[1] if len(sys.argv) > 1 else
            Path(__file__).resolve().parents[1] / "results" / "latest")
 EXP = RES / "exp01"
@@ -66,7 +69,7 @@ def seed_lines(ax, n, xy_of, lw=1.0):
             label=f"n={n}", zorder=3)
 
 
-def overlay(xy_of, ylabel, name, logx=True, ylim=None, title=""):
+def overlay(xy_of, ylabel, name, logx=True, ylim=None, title="", cap=None):
     fig, ax = plt.subplots(figsize=(8, 5))
     for n in NS:
         seed_lines(ax, n, xy_of)
@@ -78,12 +81,14 @@ def overlay(xy_of, ylabel, name, logx=True, ylim=None, title=""):
         ax.set_ylim(*ylim)
     ax.legend(ncol=2, fontsize=9, title="injected pairs",
               title_fontsize=9, framealpha=0.9)
+    if cap:
+        caption(fig, cap)
     fig.savefig(FIG / f"{name}_overlay.png", bbox_inches="tight")
     plt.close(fig)
 
 
 def subplots(xy_of, ylabel, name, logx=True, ylim=None, title="",
-             baseline_ref=True, ns=None):
+             baseline_ref=True, ns=None, cap=None):
     ns = ns if ns is not None else [n for n in NS if n]
     fig, axes = plt.subplots(2, 3, figsize=(13, 7), sharex=True, sharey=True)
     for ax, n in zip(axes.flat, ns):
@@ -107,16 +112,23 @@ def subplots(xy_of, ylabel, name, logx=True, ylim=None, title="",
     fig.supylabel(ylabel)
     fig.suptitle(title)
     fig.tight_layout()
+    if cap:
+        caption(fig, cap)
     fig.savefig(FIG / f"{name}_subplots.png", bbox_inches="tight")
     plt.close(fig)
 
 
 # %% main hypothesis — grokking dynamics: test accuracy vs epoch
+CAP_ACC = ("Test accuracy vs epoch by injected-pair count n (4 seeds + mean). "
+           "n>=3 groks ~400 ep vs ~10k for baseline; n=1-2 is a 'valley of "
+           "death' where several seeds never grok.")
 acc = lambda n, s: hist(n, s, "test_acc")
 overlay(acc, "test accuracy", "acc", ylim=(-0.02, 1.02),
-        title="Exp01 — grokking vs n injected pairs (4 seeds + mean)")
+        title="Exp01 — grokking vs n injected pairs (4 seeds + mean)",
+        cap=CAP_ACC)
 subplots(acc, "test accuracy", "acc", ylim=(-0.02, 1.02),
-         title="Exp01 — test accuracy per n (4 seeds; gray dashed = n=0 mean)")
+         title="Exp01 — test accuracy per n (4 seeds; gray dashed = n=0 mean)",
+         cap=CAP_ACC)
 
 # %% main hypothesis — time-to-grok summary
 fig, ax = plt.subplots(figsize=(7, 4.6))
@@ -139,6 +151,9 @@ ax.set(xticks=range(len(NS)), xticklabels=NS, xlabel="n injected pairs",
        ylabel="grok epoch (test acc ≥ 0.99)", yscale="log",
        title="Exp01 — time to grok (dots = seeds, dash = mean, censored at 30k)")
 ax.legend(fontsize=8, loc="center right")
+caption(fig, "Epochs to grok (test acc >=0.99) vs n; dots=seeds, dash=mean, "
+             "triangles=never-grokked (censored at 30k). Sharp completeness "
+             "threshold at n=3.")
 fig.savefig(FIG / "grok_vs_n.png", bbox_inches="tight")
 plt.close(fig)
 
@@ -153,7 +168,7 @@ key = lambda n, s: snap(n, s, lambda sn: (len(sn["injected_in_key_freqs"]) /
 NS_INJ = [n for n in NS if n]
 
 
-def overlay_inj(xy_of, ylabel, name, title, ylim=None):
+def overlay_inj(xy_of, ylabel, name, title, ylim=None, cap=None):
     fig, ax = plt.subplots(figsize=(8, 5))
     for n in NS_INJ:
         seed_lines(ax, n, xy_of)
@@ -161,16 +176,26 @@ def overlay_inj(xy_of, ylabel, name, title, ylim=None):
     if ylim:
         ax.set_ylim(*ylim)
     ax.legend(ncol=2, fontsize=9, title="injected pairs", title_fontsize=9)
+    if cap:
+        caption(fig, cap)
     fig.savefig(FIG / f"{name}_overlay.png", bbox_inches="tight")
     plt.close(fig)
 
 
+CAP_UPTAKE = ("Fraction of W_E Fourier power on the injected freqs vs epoch. "
+              "Rapid uptake to ~60-95% within the first 2k epochs — the "
+              "embedding adopts the oracle's frequencies.")
 overlay_inj(up, "W_E power fraction at injected freqs", "uptake",
-            "Exp01 — embedding uptake of injected freqs (4 seeds + mean)")
+            "Exp01 — embedding uptake of injected freqs (4 seeds + mean)",
+            cap=CAP_UPTAKE)
 subplots(up, "W_E power fraction at injected freqs", "uptake", logx=False,
-         title="Exp01 — embedding uptake per n", baseline_ref=False)
+         title="Exp01 — embedding uptake per n", baseline_ref=False,
+         cap=CAP_UPTAKE)
 overlay_inj(key, "fraction of injected freqs in key freqs", "injected_in_key",
-            "Exp01 — injected freqs adopted as key freqs", ylim=(-0.05, 1.05))
+            "Exp01 — injected freqs adopted as key freqs", ylim=(-0.05, 1.05),
+            cap="Fraction of injected freqs retained in the model's key "
+                "(working) frequencies. ~100% at small n, dropping to ~62% at "
+                "n=8 (over-complete basis is pruned).")
 
 # %% sanity — ablation: model.inject=False at inference (whole oracle off;
 # all-or-nothing — learned weights keep their uptake, the live signal is cut)
@@ -178,18 +203,27 @@ abl_delta = lambda n, s: snap(n, s, lambda sn: sn.get("ablation_test",
                                                       {}).get("delta"))
 abl_acc = lambda n, s: snap(n, s, lambda sn: sn.get("ablation_test",
                                                     {}).get("acc_off"))
+CAP_ABL_ACC = ("Test accuracy with the live oracle switched off at inference. "
+               "n=3 collapses (oracle-dependent); n=8 stays high (internalized) "
+               "— independence grows with n.")
+CAP_ABL_DELTA = ("CE increase when the oracle is switched off (causal "
+                 "dependence on the live signal) vs epoch, by n.")
 overlay_inj(abl_delta, "CE(oracle off) − CE(oracle on)", "ablation_delta",
-            "Exp01 sanity — CE jump with oracle injection disabled at inference")
+            "Exp01 sanity — CE jump with oracle injection disabled at inference",
+            cap=CAP_ABL_DELTA)
 overlay_inj(abl_acc, "test accuracy, oracle injection off",
             "ablation_acc", "Exp01 sanity — accuracy without the live oracle "
-            "signal (low = model leans on it at inference)", ylim=(-0.02, 1.02))
+            "signal (low = model leans on it at inference)", ylim=(-0.02, 1.02),
+            cap=CAP_ABL_ACC)
 subplots(abl_delta, "CE(oracle off) − CE(oracle on)", "ablation_delta",
          logx=False, baseline_ref=False, ns=NS_INJ,
-         title="Exp01 sanity — oracle-off CE delta per n (4 seeds)")
+         title="Exp01 sanity — oracle-off CE delta per n (4 seeds)",
+         cap=CAP_ABL_DELTA)
 subplots(abl_acc, "test accuracy, oracle injection off",
          "ablation_acc", logx=False, ylim=(-0.02, 1.02), baseline_ref=False,
          ns=NS_INJ,
-         title="Exp01 sanity — accuracy with oracle off, per n (4 seeds)")
+         title="Exp01 sanity — accuracy with oracle off, per n (4 seeds)",
+         cap=CAP_ABL_ACC)
 
 # final-snapshot ablation summary vs n
 fig, ax = plt.subplots(figsize=(7, 4.6))
@@ -207,6 +241,9 @@ ax.set(xticks=range(len(NS_INJ)), xticklabels=NS_INJ,
        xlabel="n injected pairs", ylabel="final test accuracy",
        title="Exp01 sanity — final accuracy, oracle on vs off (whole mechanism)")
 ax.legend()
+caption(fig, "Final accuracy, oracle on vs off, per n. The on-off gap shrinks "
+             "as n grows: redundant bases (n=8) become ablation-proof; minimal "
+             "bases (n=3) stay dependent.")
 fig.savefig(FIG / "ablation_final.png", bbox_inches="tight")
 plt.close(fig)
 
@@ -228,6 +265,9 @@ axes[0].set(xlabel="epoch", ylabel="mean excluded loss (injected freqs)",
 axes[1].set(xlabel="epoch", ylabel="W_E spectral Gini",
             title="embedding spectral concentration")
 axes[1].legend(ncol=2, fontsize=8, title="n", title_fontsize=8)
+fig.tight_layout()
+caption(fig, "Sanity: per-injected-freq excluded loss (necessity) and W_E "
+             "spectral Gini (concentration) over training, by n.")
 fig.savefig(FIG / "sanity_excluded_gini.png", bbox_inches="tight")
 plt.close(fig)
 
@@ -254,6 +294,10 @@ axs[1].set(yscale="log", xlabel="epoch",
 axs[1].legend(ncol=2, fontsize=8, title="n", title_fontsize=8)
 fig.suptitle("Exp01 — injected freqs: sufficiency vs necessity (4 seeds + mean)")
 fig.tight_layout()
+CAP_TRIG = ("Sufficiency (trig loss: injected freqs alone) vs necessity "
+            "(excluded loss: delete an injected freq) per n. Sufficiency rises "
+            "and per-freq necessity falls as n grows.")
+caption(fig, CAP_TRIG)
 fig.savefig(FIG / "trig_excluded_overlay.png", bbox_inches="tight")
 plt.close(fig)
 
@@ -276,6 +320,7 @@ fig.supylabel("loss (log)")
 fig.suptitle("Exp01 — trig vs excluded loss per n (4 seeds; "
              "low solid + high dashed = solution lives in injected freqs)")
 fig.tight_layout()
+caption(fig, CAP_TRIG)
 fig.savefig(FIG / "trig_excluded_subplots.png", bbox_inches="tight")
 plt.close(fig)
 
@@ -306,6 +351,10 @@ fig.supylabel("final W_E Fourier power")
 fig.suptitle("Exp01 mechanistic — W_E spectrum, 4 seeds per panel "
              "(green dashed = injected, red ▼ = non-injected key freqs)")
 fig.tight_layout()
+caption(fig, "Final W_E Fourier spectrum per regime (4 seeds; green "
+             "dashed=injected, red v=recruited non-injected key freqs). Below "
+             "threshold (n=2) the model recruits extra freqs; n>=3 uses exactly "
+             "the injected set.")
 fig.savefig(FIG / "we_spectrum.png", bbox_inches="tight")
 plt.close(fig)
 
