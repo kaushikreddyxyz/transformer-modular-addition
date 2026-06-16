@@ -57,25 +57,28 @@ trig-based sufficiency (no excluded-loss panel) — valid for both models.
 > suite, and exp06's brief exp01-style reproduction — are in git history
 > (`9bea178`, `ccba8c5`) if needed.
 
-## exp02_1 — delayed injection (T∈{4000,8000}), 5 figures ⚠️ contradicts hypothesis
+## exp02_1 — delayed injection (T∈{4000,8000}), 4 figures ⚠️ contradicts hypothesis
 **Hypothesis:** the oracle drives grokking, so injecting at epoch T should make
 the model adopt the injected freqs and grok shortly after T. **Verdict:
 contradicted — there is a critical period.**
+
+Minimalistic, subplot-only (one panel per n; the two injection times are two
+colours, blue=4000 / orange=8000, with vertical lines at T). Replaces the
+earlier busy n-overlaid panels.
 
 **Finding (verified):** a late-arriving oracle is **completely ignored**.
 Injection gating is correct (`injecting` flips True at T), yet grok timing is
 identical to the **n=0 baseline** regardless of n or T (n=3 inject@4000:
 [9.6k,10k,4.6k,7.2k] vs baseline [10k,11k,4.6k,8k]; even n=8 inject@8000 groks
 on baseline schedule, vs ~400 ep when injected from epoch 0 in exp01). Uptake
-collapses to ~0.01–0.13 (vs 0.90–0.96 in exp01) and the model stays
+stays flat near baseline (~0.01–0.13, vs 0.90–0.96 in exp01) and the model stays
 oracle-**independent** (acc_off≈0.75–1.0). Injection only shapes the circuit if
 present from the start.
 
-- M `1_acc_vs_epoch_by_T` — grok onset is at baseline absolute epoch, not T+lag.
-- M `2_uptake_vs_epoch_by_T` — no uptake jump at T; embedding ignores the oracle.
-- M `5_grok_lag_vs_T` — grok lag (grok−T) is *not* shared across T ⇒ grok is time-driven, not injection-driven (the money figure).
-- S `3_event_aligned_uptake` — T-curves don't collapse when re-zeroed to injection.
-- S `4_ablation_accoff_vs_epoch_by_T` — model is fully functional with oracle off.
+- `grok_dynamics` — test acc per n; grok at ~baseline absolute epoch, not T+lag.
+- `uptake` — W_E power on injected freqs per n; flat, no jump at T.
+- `ablation` — accuracy oracle ON vs OFF per n (ON≈OFF≈1 ⇒ independent of the live oracle).
+- `grok_vs_n` — grok epoch vs n by T; both T grok far above their injection lines.
 
 ## exp02_2 — amplitude (0.5–4×), 7 figures ◐ partial
 **Hypothesis:** higher oracle amplitude makes W_E lazy (offload to oracle) and
