@@ -63,8 +63,10 @@ the model adopt the injected freqs and grok shortly after T. **Verdict:
 contradicted — there is a critical period.**
 
 Minimalistic, subplot-only (one panel per n; the two injection times are two
-colours, blue=4000 / orange=8000, with vertical lines at T). Replaces the
-earlier busy n-overlaid panels.
+colours, blue=4000 / orange=8000, with vertical lines at T). The no-oracle
+**n=0 baseline is drawn translucently** in every figure as a reference — taken
+from exp01's n=0 (same model, oracle never injected), since exp02_1 has no n=0
+of its own. Replaces the earlier busy n-overlaid panels.
 
 **Finding (verified):** a late-arriving oracle is **completely ignored**.
 Injection gating is correct (`injecting` flips True at T), yet grok timing is
@@ -76,9 +78,9 @@ oracle-**independent** (acc_off≈0.75–1.0). Injection only shapes the circuit
 present from the start.
 
 - `grok_dynamics` — test acc per n; grok at ~baseline absolute epoch, not T+lag.
-- `uptake` — W_E power on injected freqs per n; flat, no jump at T.
-- `ablation` — accuracy oracle ON vs OFF per n (ON≈OFF≈1 ⇒ independent of the live oracle).
-- `grok_vs_n` — grok epoch vs n by T; both T grok far above their injection lines.
+- `uptake` — W_E power on injected freqs per n; sits at the n=0 baseline level, no jump at T.
+- `ablation_T4000` / `ablation_T8000` — accuracy oracle ON vs OFF per n, **one figure per injection time** (pooling them is meaningless — "before T" differs). ON≈OFF before T (ON marginally lower); the ON>OFF gap opens only *after* T; OFF tracks the n=0 baseline ⇒ the model ends up nearly independent.
+- `grok_vs_n` — grok epoch vs n by T; both T grok within the n=0 baseline band, far above their injection lines.
 
 ## exp02_2 — amplitude (0.5–4×), 7 figures ◐ partial
 **Hypothesis:** higher oracle amplitude makes W_E lazy (offload to oracle) and
