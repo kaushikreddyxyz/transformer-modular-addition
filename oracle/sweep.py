@@ -138,18 +138,47 @@ def build_oracle(ospec, cfg):
 def spec(*, exp, label, seed, oracle=None, axes=None, p=113, d_model=128,
          num_epochs=NUM_EPOCHS, inject_from_epoch=0, eval_every=EVAL_EVERY,
          snapshot_every=SNAPSHOT_EVERY, snapshots=True, ckpt_epochs=None,
-         config=None):
-    """A JSON-serializable description of one training run."""
+         config=None, freeze=None, stop_after_grok=None, grok_acc=0.99):
+    """A JSON-serializable description of one training run.
+
+    `freeze`: list of parameter-name patterns to hold fixed at init (a param is
+    frozen if any pattern is a substring of its `named_parameters()` name, e.g.
+    `["embed.W_E"]` to freeze the token embedding). `stop_after_grok`: if set,
+    stop this many epochs after the first epoch with test_acc >= `grok_acc`
+    (early stopping at grokking); None trains to `num_epochs`.
+    """
     return dict(exp=exp, label=label, seed=seed,
                 oracle=oracle or dict(kind="none"), axes=axes or {},
                 p=p, d_model=d_model, num_epochs=num_epochs,
                 inject_from_epoch=inject_from_epoch, eval_every=eval_every,
                 snapshot_every=snapshot_every, snapshots=snapshots,
-                ckpt_epochs=ckpt_epochs, config=config or {})
+                ckpt_epochs=ckpt_epochs, config=config or {},
+                freeze=freeze or [], stop_after_grok=stop_after_grok,
+                grok_acc=grok_acc)
 
 
 def result_path(s):
     return RESULTS_DIR / s["exp"] / f"{s['label']}.result.json"
+
+
+def freeze_params(model, patterns):
+    """Hold parameters fixed at init by clearing requires_grad.
+
+    A parameter is frozen if any pattern in `patterns` is a substring of its
+    `named_parameters()` name (e.g. `["embed.W_E"]` freezes the token embedding,
+    which has no other matches: `unembed.W_U`/`W_pos` don't contain "W_E").
+    Returns the frozen names; raises if a non-empty `patterns` matches nothing,
+    so a typo'd freeze spec fails loudly instead of silently training everything.
+    """
+    patterns = list(patterns or [])
+    frozen = []
+    for name, p in model.named_parameters():
+        if any(pat in name for pat in patterns):
+            p.requires_grad_(False)
+            frozen.append(name)
+    if patterns and not frozen:
+        raise ValueError(f"freeze patterns {patterns} matched no parameters")
+    return frozen
 
 
 def execute(s, device=None, use_wandb=True, force=False, verbose=True):
@@ -165,6 +194,8 @@ def execute(s, device=None, use_wandb=True, force=False, verbose=True):
                       **s.get("config", {}))
     oracle_fn, injected = build_oracle(s["oracle"], cfg)
     model, data = harness.setup(cfg, oracle_fn=oracle_fn)
+    # Freeze before train() builds the optimizer (it skips non-trainable params).
+    frozen = freeze_params(model, s.get("freeze"))
 
     snapshot_fn = None
     if s.get("snapshots", True):
@@ -185,7 +216,9 @@ def execute(s, device=None, use_wandb=True, force=False, verbose=True):
         run_dir=run_dir, label=s["label"], verbose=verbose,
         use_wandb=use_wandb, wandb_group=s["exp"],
         wandb_config=dict(s.get("axes", {})), ckpt_epochs=ckpts,
-        result_extra=dict(spec=s, injected_freqs=injected))
+        stop_after_grok=s.get("stop_after_grok"),
+        grok_acc=s.get("grok_acc", 0.99),
+        result_extra=dict(spec=s, injected_freqs=injected, frozen_params=frozen))
     return res
 
 

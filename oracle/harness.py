@@ -140,8 +140,11 @@ def train(config: transformer.Config, model, data, *, num_epochs,
     after N epochs of training, for N in `ckpt_epochs` (None/() disables).
     Returns dict(history, snapshots, grok_epoch, label, config).
     """
-    opt = optim.AdamW(model.parameters(), lr=config.lr,
-                      weight_decay=config.weight_decay, betas=(0.9, 0.98))
+    # Only optimize trainable params: a frozen param (e.g. W_E held at init)
+    # must be excluded so AdamW's decoupled weight decay never touches it.
+    opt = optim.AdamW([p for p in model.parameters() if p.requires_grad],
+                      lr=config.lr, weight_decay=config.weight_decay,
+                      betas=(0.9, 0.98))
     sched = optim.lr_scheduler.LambdaLR(opt, lambda step: min(step / 10, 1))
 
     history, snapshots = [], []
@@ -207,6 +210,12 @@ def train(config: transformer.Config, model, data, *, num_epochs,
                     wrun.log(_snapshot_scalars(snap), step=epoch)
 
             if stopping:
+                # Persist the grokked model at the early-stop epoch (the fixed
+                # ckpt_epochs schedule would otherwise miss the dynamic stop).
+                if run_dir is not None and (epoch + 1) not in ckpt_set:
+                    save_checkpoint(model, config, run_dir, label, epoch + 1,
+                                    inject_from_epoch=inject_from_epoch,
+                                    stopped_at_grok=True)
                 break
     finally:
         if pbar is not None:
