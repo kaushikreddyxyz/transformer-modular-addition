@@ -184,15 +184,24 @@ def _coefficients_lowmem(logits, p, device):
 # --------------------------------------------------------------------------- #
 @t.no_grad()
 def ablation_ce(model, x, y, config):
-    """Cross-entropy with the oracle ON vs OFF (model.inject toggled).
+    """Cross-entropy/accuracy with the oracle LIVE vs ABLATED (forced off).
 
-    Returns dict(ce_on, ce_off, delta, acc_on, acc_off). A large positive `delta`
-    on held-out data == the model causally depends on the injected feature.
+    `*_on` is the model's *status-quo* state — exactly the injection state it is
+    currently being trained/evaluated with (``model.inject`` as-is). `*_off`
+    forces the oracle off. This is a true ablation: it only ever *removes* the
+    live signal, never adds one.
+
+    Crucially, do NOT force ``inject=True`` for the `on` measurement. Under
+    delayed injection the model trains with ``inject=False`` until epoch T; before
+    T the live state is already off, so `on == off` and ``delta == 0`` by
+    construction. Forcing it on (the old behaviour) injected a signal the model
+    was never trained on, spuriously perturbing every pre-T snapshot. A large
+    positive `delta` on held-out data == the model causally depends on the live
+    injected feature.
     """
     was = model.inject
-    model.inject = True
-    ce_on, acc_on = _ce_acc(model, x, y, config)
-    model.inject = False
+    ce_on, acc_on = _ce_acc(model, x, y, config)    # live / status quo
+    model.inject = False                             # ablate: force oracle off
     ce_off, acc_off = _ce_acc(model, x, y, config)
     model.inject = was
     return dict(ce_on=ce_on, ce_off=ce_off, delta=ce_off - ce_on,

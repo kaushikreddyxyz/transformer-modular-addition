@@ -79,7 +79,15 @@ present from the start.
 
 - `grok_dynamics` — test acc per n; grok at ~baseline absolute epoch, not T+lag.
 - `uptake` — W_E power on injected freqs per n; sits at the n=0 baseline level, no jump at T.
-- `ablation_T4000` / `ablation_T8000` — accuracy oracle ON vs OFF per n, **one figure per injection time** (pooling them is meaningless — "before T" differs). ON≈OFF before T (ON marginally lower); the ON>OFF gap opens only *after* T; OFF tracks the n=0 baseline ⇒ the model ends up nearly independent.
+- `ablation_T4000` / `ablation_T8000` — live vs oracle-forced-off accuracy per n, **one figure per injection time**. A true ablation only *removes* the live signal (see note), so before T live==ablated (identical by construction); any gap opens only *after* T, stays small, and both track the n=0 baseline ⇒ the model ends up nearly independent.
+
+> **Ablation metric corrected (analysis.py `ablation_ce`):** it now compares the
+> model's *live* state vs the oracle *forced off*, instead of forcing the oracle
+> *on* vs off. The old version injected a signal the model was never trained on,
+> spuriously perturbing every pre-T snapshot (delta≠0 before injection). Existing
+> exp02_1 result.json files were corrected in place (pre-T `*_on` set equal to
+> `*_off`, delta=0); only exp02_1 was affected (every other run injects from
+> epoch 0, so live==on throughout and its data/figures are unchanged).
 - `grok_vs_n` — grok epoch vs n by T; both T grok within the n=0 baseline band, far above their injection lines.
 
 ## exp02_2 — amplitude (0.5–4×), 7 figures ◐ partial

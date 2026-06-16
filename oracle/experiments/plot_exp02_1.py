@@ -145,23 +145,24 @@ def fig_ablation_by_T(runs, ns, outdir, baseline_draw):
             ax.set_ylim(-0.03, 1.05)
         for ax in axes.flat[len(ns):]:
             ax.set_visible(False)
-        fig.legend(handles=[Line2D([], [], color=ON_C, lw=2, label="oracle ON"),
-                            Line2D([], [], color=OFF_C, lw=2, label="oracle OFF"),
+        fig.legend(handles=[Line2D([], [], color=ON_C, lw=2, label="live (oracle status-quo)"),
+                            Line2D([], [], color=OFF_C, lw=2, label="ablated (oracle forced off)"),
                             Line2D([], [], color="0.25", ls="--", lw=1.1, label=f"inject @ {T}"),
                             Line2D([], [], color=BASE_C, lw=2, alpha=0.6, label="n=0 baseline (no oracle)")],
                    loc="center left", bbox_to_anchor=(1.0, 0.5), frameon=True)
         fig.supxlabel("epoch (log)")
         fig.supylabel("test accuracy")
-        fig.suptitle(f"Exp02_1 — ablation (oracle ON vs OFF), injection @ T={T} "
-                     "(per n)", fontsize=12.5)
+        fig.suptitle(f"Exp02_1 — ablation (live vs oracle forced off), injection "
+                     f"@ T={T} (per n)", fontsize=12.5)
         pc.save(fig, outdir / f"ablation_T{T}.png", cap=(
-            f"Accuracy with the live oracle ON (blue) vs OFF (red) at inference; "
-            f"the oracle is injected at epoch {T} (dashed line), per n (4 seeds + "
-            "mean; gray = no-oracle n=0 baseline). Before T the two curves nearly "
-            "coincide (ON marginally lower — an injected signal the model wasn't "
-            "trained on mildly perturbs it); the ON>OFF gap opens only AFTER T, as "
-            "the model starts to use the oracle. OFF tracks the n=0 baseline — the "
-            "model ends up nearly independent of the live signal."))
+            f"Accuracy in the model's live state (blue, oracle status-quo) vs "
+            f"ablated (red, oracle forced off); injection at epoch {T} (dashed "
+            "line), per n (4 seeds + mean; gray = no-oracle n=0 baseline). A true "
+            "ablation only removes the live signal — so before T the two are "
+            "IDENTICAL by construction (the live state is already oracle-off until "
+            "T) and any gap can open only AFTER T. The post-T gap stays small and "
+            "both converge near 1 (tracking the baseline): the model ends up "
+            "nearly independent of the live oracle."))
 
 
 def fig_grok_vs_n(runs, ns, outdir, base):
