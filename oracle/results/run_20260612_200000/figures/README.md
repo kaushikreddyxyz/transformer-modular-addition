@@ -113,33 +113,39 @@ hint, not the strong (onehot) one.
 - S `laziness_we` — W_E norm + Gini by config.
 - S `spectrum_compare` — hint changes solution *shape*, not just speed.
 
-## exp06 — exp01's analyses rebuilt on richer data (p=211, frac=0.075, 75k), 6 figures
-exp06 strictly dominates exp01 as a data source (contiguous n=0..11, larger
-model, low-data rescue regime). This **curated, subplot-only set replaces the
-exp01 figures** for these questions; it tests the same things on better data.
-All six are per-n subplot grids or vs-n dashboards — no overlays.
+## exp06 — exp01's EXACT figure suite on a different model (p=211, frac=0.075, 75k), 15 figures
+`plot_exp06.py` is a faithful twin of `plot_exp01.py`: **same 15 metrics, plot
+types, styling, and filenames** — so `figures/exp01/X.png` and
+`figures/exp06/X.png` are directly comparable. The only differences are forced
+by the model/data: the per-n subplot grids auto-size (11 nonzero n vs 6), the
+grok censor cap = the model's num_epochs (75k vs 30k), and titles/captions name
+exp06 (its findings differ — see below).
 
-**Findings (verified):** (1) **completeness/rescue** — low-data n=0,1,2 never
-grok; injection rescues sharply at n=3. (2) **uptake** — n≥3 concentrate 70–95%
-of W_E power on the injected freqs. (3) **spectrum** — power lands exactly on
-injected sites; n=2 stays diffuse. (4,6) **ablation reverses the p=113 trend** —
-dependence on the live oracle (ON−OFF gap, CE delta) *grows* with n here, where
-at p=113 larger bases became ablation-proof. (5) **sufficiency** — injected-only
-trig loss collapses toward full loss for n≥3. (6) **decisive: the kept-set
-ceiling MOVES** — working set climbs past the p=113 ~5 line to ~9–10 by n=11,
-supporting the capacity-bound (parameter-cost) hypothesis.
+**What the same lens shows on the bigger model:** n=0,1,2 never grok (low-data
+baseline can't); injection rescues at n=3; n≥3 take up 70–95% of W_E power on
+the injected freqs (uptake), with power landing exactly on injected sites
+(we_spectrum). **The ablation result REVERSES vs exp01:** at p=211 the oracle-off
+accuracy gap *grows* with n (larger bases depend on the live signal MORE),
+whereas at p=113 larger bases became ablation-proof. Read exp06's ablation
+figures with that in mind — the captions describe the metric, not exp01's claim.
 
-- M `grok_dynamics` — test acc per n (0..11); the rescue threshold at n=3.
-- M `uptake` — W_E power fraction on injected freqs per n.
-- M `spectrum` — final W_E Fourier spectrum (105 freqs) per n, injected marked.
-- S `ablation` — accuracy oracle ON vs OFF per n (causal use; gap grows with n).
-- S `sufficiency` — trig loss (injected-only vs key-freqs vs full) per n.
-- M `summary_vs_n` — 2×2 dashboard: (a) kept-set ceiling + p=113 line [decisive], (b) retained fraction, (c) acc ON vs OFF, (d) CE delta — all vs n.
+Same filenames as exp01: `acc_overlay/subplots`, `grok_vs_n`,
+`uptake_overlay/subplots`, `injected_in_key_overlay`,
+`ablation_acc_overlay/subplots`, `ablation_delta_overlay/subplots`,
+`ablation_final`, `trig_excluded_overlay/subplots`, `sanity_excluded_gini`,
+`we_spectrum`.
 
 ⚠️ **Data caveat:** `excluded_loss_injected` (exp01's necessity metric) is 100%
 NaN at p=211 — `calculate_excluded_loss` blows up numerically at the larger
-prime. Necessity is therefore carried by the ablation figure (causal removal of
-the live signal). Worth fixing upstream if you want the excluded-loss view.
+prime. So the necessity panels in `sanity_excluded_gini` and
+`trig_excluded_*` render blank (annotated); the trig/sufficiency and Gini
+panels are valid, and necessity is shown causally by the ablation figures.
+Worth fixing upstream if you want the excluded-loss view.
+
+> The earlier *curated* 6-figure exp06 set (per-n subplot grids + a vs-n
+> dashboard, incl. the decisive kept-set-ceiling plot showing the working set
+> climb past ~5 to ~9–10) lives in git history at commit `9bea178`, if you want
+> the consolidated version back.
 
 ---
 
