@@ -228,6 +228,79 @@ def fig_spectrum_compare(runs, configs, outdir):
     pc.save(fig, Path(outdir) / "spectrum_compare.png", cap=cap)
 
 
+def fig_we_spectrum(runs, configs, outdir):
+    """Final W_E Fourier spectrum per config, one panel each (4 seeds + mean).
+
+    The answer hint is injected at the readout, NOT into W_E, so there are no
+    'injected' frequencies to mark — this asks whether the hint reshapes the
+    LEARNED embedding basis relative to baseline.
+    """
+    fig, axes = plt.subplots(1, len(configs), figsize=(3.5 * len(configs), 3.7),
+                             sharex=True, sharey=True, squeeze=False)
+    for ax, cfg in zip(axes[0], configs):
+        rs = pc.select(runs, hint=cfg)
+        specs = [np.asarray(pc.final_snap(r)["we_freq_power_full"], float)
+                 for r in rs if pc.final_snap(r).get("we_freq_power_full")]
+        if specs:
+            freqs = np.arange(1, len(specs[0]) + 1)
+            for sp in specs:
+                ax.plot(freqs, sp, color=COLOR[cfg], alpha=0.30, lw=0.8)
+            ax.plot(freqs, np.mean(specs, 0), color=COLOR[cfg], lw=1.8)
+        gk = sum(pc.groked(r) for r in rs)
+        ax.set_title(f"{PRETTY[cfg]}  ({gk}/{len(rs)} grok)", fontsize=9.5)
+        ax.set_xlabel("freq index (1..56)")
+    axes[0][0].set_ylabel("final W_E Fourier power")
+    fig.suptitle("exp05 — final W_E spectrum by hint config (4 seeds + mean)",
+                 fontsize=12.5)
+    cap = ("Final W_E Fourier power spectrum per config (4 seeds faint + mean "
+           "bold). The hint injects NOTHING into W_E, so the question is whether "
+           "it reshapes the LEARNED basis vs baseline (gray): a sparser / lower "
+           "comb = a simpler, lazier embedding. Companion to spectrum_compare.")
+    pc.save(fig, Path(outdir) / "we_spectrum.png", cap=cap)
+
+
+def fig_ablation(runs, configs, outdir):
+    """ON-vs-ablated accuracy trajectory per hint config (baseline excluded)."""
+    ON_C, OFF_C = "#1f77b4", "#d62728"
+    hint_cfgs = [c for c in configs if c != "baseline"]
+
+    def snap_y(key):
+        return lambda r: pc.snap_series(
+            r, lambda s: (s.get("ablation_test") or {}).get(key))[1]
+
+    def snap_x(key):
+        return lambda r: np.clip(pc.snap_series(
+            r, lambda s: (s.get("ablation_test") or {}).get(key))[0], 1, None)
+
+    fig, axes = plt.subplots(1, len(hint_cfgs),
+                             figsize=(4.3 * len(hint_cfgs), 4.3),
+                             sharex=True, sharey=True, squeeze=False)
+    for ax, cfg in zip(axes[0], hint_cfgs):
+        rs = pc.select(runs, hint=cfg)
+        pc.seed_family(ax, rs, x_fn=snap_x("acc_on"), y_fn=snap_y("acc_on"),
+                       color=ON_C, alpha_seed=0.18, lw_mean=1.9)
+        pc.seed_family(ax, rs, x_fn=snap_x("acc_off"), y_fn=snap_y("acc_off"),
+                       color=OFF_C, alpha_seed=0.18, lw_mean=1.9)
+        ax.set_xscale("log")
+        ax.set_ylim(-0.03, 1.05)
+        ax.set_title(PRETTY[cfg], fontsize=10)
+        ax.set_xlabel("epoch (log)")
+    axes[0][0].set_ylabel("test accuracy")
+    fig.legend(handles=[
+        Line2D([], [], color=ON_C, lw=2, label="hint live (status-quo)"),
+        Line2D([], [], color=OFF_C, lw=2, label="hint ablated (forced off)")],
+        loc="upper right", bbox_to_anchor=(0.995, 0.995), frameon=True,
+        fontsize=8)
+    fig.suptitle("exp05 — dependence on the live hint: accuracy live vs ablated",
+                 fontsize=12.5)
+    cap = ("Accuracy over training with the hint live (blue) vs ablated at "
+           "inference (red), per hint config; baseline has no hint to ablate. "
+           "The hint LEAKS the label so blue rises to ~1 trivially — the "
+           "blue-red GAP is the model's dependence on the live hint (large gap "
+           "= crutch). Trajectory companion to dependence_accoff.")
+    pc.save(fig, Path(outdir) / "ablation.png", cap=cap)
+
+
 # --------------------------------------------------------------------------- #
 def main():
     pc.set_style()
@@ -248,6 +321,8 @@ def main():
     fig_laziness_we(runs, configs, outdir)
     fig_dependence_accoff(runs, configs, outdir)
     fig_spectrum_compare(runs, configs, outdir)
+    fig_we_spectrum(runs, configs, outdir)
+    fig_ablation(runs, configs, outdir)
 
     print(f"[exp05] wrote figures to {outdir}")
     for p in sorted(outdir.glob("*.png")):

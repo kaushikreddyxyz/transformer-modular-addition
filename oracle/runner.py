@@ -20,11 +20,11 @@ models use a small slice of a modern GPU, so several runs share one device
 profitably (`--workers` processes round-robined over `--gpus`).
 
 Usage (on the GPU box, from the repo root):
-  python -m modular_addition.oracle.experiments.runner --dry-run
-  python -m modular_addition.oracle.experiments.runner --workers 10
-  python -m modular_addition.oracle.experiments.runner \
+  python -m modular_addition.oracle.runner --dry-run
+  python -m modular_addition.oracle.runner --workers 10
+  python -m modular_addition.oracle.runner \
       --exps exp06 --workers 6 --gpus 0,1
-  python -m modular_addition.oracle.experiments.runner \
+  python -m modular_addition.oracle.runner \
       --results-dir modular_addition/oracle/results/run_20260610_120000
 
 After training: run each experiment file's summary cells for summary.json,
@@ -49,14 +49,16 @@ from datetime import datetime
 from pathlib import Path
 
 try:
-    _root = str(Path(__file__).resolve().parents[3])
+    # runner.py lives in modular_addition/oracle/; parents[2] is the repo root
+    # (oracle-encodings), the dir that must be importable for `modular_addition`.
+    _root = str(Path(__file__).resolve().parents[2])
 except NameError:
     _root = "/root/oracle-encodings"
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
 _PKG = "modular_addition.oracle.experiments"
-EXPERIMENTS_DIR = Path(__file__).resolve().parent
+EXPERIMENTS_DIR = Path(__file__).resolve().parent / "experiments"
 RESULTS_BASE = EXPERIMENTS_DIR.parent / "results"
 
 

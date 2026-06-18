@@ -21,6 +21,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import plot_common as pc  # noqa: E402
@@ -242,5 +243,113 @@ pc.save(fig, FIG / "acc_curves_by_rel.png",
              "Failures pile up at LOW rel (rel<=0.25); within those panels the "
              "low-n curves are the ones stuck near chance. "
              f"{CONFOUND}"))
+
+# %% ----------------------------------------------------------------- #
+# shared rel(rows) x n(cols) panel grid + per-panel grok-count badge
+# --------------------------------------------------------------------- #
+ON_C, OFF_C = "#1f77b4", "#d62728"
+
+
+def _grid(panel=(2.55, 1.95), sharey=False):
+    fig, axes = plt.subplots(len(RELS_DESC), len(NS),
+                             figsize=(panel[0] * len(NS), panel[1] * len(RELS_DESC)),
+                             sharex=True, sharey=sharey, squeeze=False)
+    return fig, axes
+
+
+def _grok_badge(ax, sub):
+    gk = sum(pc.groked(r) for r in sub)
+    col = "0.3" if gk == len(sub) else ("#b00020" if gk == 0 else "#9a6a00")
+    ax.text(0.96, 0.92, f"{gk}/{len(sub)}", transform=ax.transAxes,
+            ha="right", va="top", fontsize=7.2, color=col)
+
+
+# %% ----------------------------------------------------------------- #
+# FIG 6 — final W_E Fourier spectrum, rel (rows, desc) x n (cols)
+# WHERE the embedding's power lands; green = TRUE injected freqs. Raw power
+# with per-panel y-scale so within-panel structure (the comb) is visible even
+# when overall magnitude differs across cells.
+# --------------------------------------------------------------------- #
+fig, axes = _grid(sharey=False)
+for i, rel in enumerate(RELS_DESC):
+    for j, n in enumerate(NS):
+        ax = axes[i, j]
+        sub = pc.select(runs, rel=rel, n=n)
+        specs = [np.asarray(pc.final_snap(r)["we_freq_power_full"], float)
+                 for r in sub if pc.final_snap(r).get("we_freq_power_full")]
+        if specs:
+            freqs = np.arange(1, len(specs[0]) + 1)
+            for f in (pc.final_snap(sub[0]).get("injected_freqs") or []):
+                ax.axvline(f, color="green", ls="--", lw=0.7, alpha=0.5)
+            for sp in specs:
+                ax.plot(freqs, sp, color=COL[n], alpha=0.22, lw=0.7)
+            ax.plot(freqs, np.mean(specs, 0), color=COL[n], lw=1.4)
+        _grok_badge(ax, sub)
+        if i == 0:
+            ax.set_title(f"n = {n}", fontsize=10)
+        if j == 0:
+            ax.set_ylabel(f"rel = {rel:g}", fontsize=9.5)
+        ax.tick_params(labelsize=6.5)
+fig.legend(handles=[Line2D([], [], color="green", ls="--", lw=1.2,
+                           label="TRUE injected freqs")],
+           loc="upper right", bbox_to_anchor=(0.998, 0.998), fontsize=8)
+fig.supxlabel("Fourier frequency index (1..56)")
+fig.suptitle("Exp04 — final W_E Fourier spectrum  (rows: reliability 1.0->0.0, "
+             "cols: n injected pairs)", fontsize=12.5)
+pc.save(fig, FIG / "we_spectrum.png",
+        cap=("Final W_E power spectrum per (rel, n) cell (4 seeds faint + mean; "
+             "green dashed = TRUE base freqs; corner badge = grok count). At "
+             "high rel the embedding builds a clean comb on the TRUE freqs; as "
+             "reliability drops the comb erodes and at rel<=0.25 the high-n "
+             "cells (which never grok) show diffuse power with no comb. "
+             f"{CONFOUND}"))
+
+
+# %% ----------------------------------------------------------------- #
+# FIG 7 — standard ablation: accuracy with the live oracle ON vs OFF, over
+# training, rel (rows) x n (cols). Small ON-OFF gap = oracle-independent.
+# --------------------------------------------------------------------- #
+def _snap(key):
+    return (lambda r: np.clip(pc.snap_series(
+                r, lambda s: (s.get("ablation_test") or {}).get(key))[0], 1, None),
+            lambda r: pc.snap_series(
+                r, lambda s: (s.get("ablation_test") or {}).get(key))[1])
+
+
+on_x, on_y = _snap("acc_on")
+off_x, off_y = _snap("acc_off")
+fig, axes = _grid(sharey=True)
+for i, rel in enumerate(RELS_DESC):
+    for j, n in enumerate(NS):
+        ax = axes[i, j]
+        sub = pc.select(runs, rel=rel, n=n)
+        pc.seed_family(ax, sub, x_fn=on_x, y_fn=on_y,
+                       color=ON_C, alpha_seed=0.13, lw_mean=1.5)
+        pc.seed_family(ax, sub, x_fn=off_x, y_fn=off_y,
+                       color=OFF_C, alpha_seed=0.13, lw_mean=1.5)
+        ax.set_xscale("log")
+        ax.set_xlim(180, 30000)
+        ax.set_ylim(-0.03, 1.05)
+        _grok_badge(ax, sub)
+        if i == 0:
+            ax.set_title(f"n = {n}", fontsize=10)
+        if j == 0:
+            ax.set_ylabel(f"rel = {rel:g}", fontsize=9.5)
+        ax.tick_params(labelsize=6.5)
+fig.legend(handles=[Line2D([], [], color=ON_C, lw=2, label="oracle live (ON)"),
+                    Line2D([], [], color=OFF_C, lw=2, label="oracle forced OFF")],
+           loc="upper right", bbox_to_anchor=(0.998, 0.998), fontsize=8)
+fig.supxlabel("epoch (log)")
+fig.supylabel("test accuracy")
+fig.suptitle("Exp04 — causal use of the live oracle, ON vs OFF  (rows: "
+             "reliability 1.0->0.0, cols: n)", fontsize=12.5)
+pc.save(fig, FIG / "ablation.png",
+        cap=("Accuracy with the live oracle ON (blue) vs forced OFF at "
+             "inference (red), per (rel, n) cell (4 seeds + mean; badge = grok "
+             "count). Where the model groks, ON and OFF nearly coincide "
+             "(acc_off ~ 1): it has internalised the solution and barely uses "
+             "the live oracle. Non-grokking low-rel cells sit at chance for "
+             f"both. {CONFOUND}"))
+
 
 print(f"wrote {len(list(FIG.glob('*.png')))} figures -> {FIG}")

@@ -90,7 +90,7 @@ present from the start.
 > epoch 0, so live==on throughout and its data/figures are unchanged).
 - `grok_vs_n` — grok epoch vs n by T; both T grok within the n=0 baseline band, far above their injection lines.
 
-## exp02_2 — amplitude (0.5–4×), 7 figures ◐ partial
+## exp02_2 — amplitude (0.5–4×), 13 figures ◐ partial
 **Hypothesis:** higher oracle amplitude makes W_E lazy (offload to oracle) and
 can destabilize training. **Verdict:** dependence-laziness confirmed; structural
 laziness partial; destabilization confirmed but driven by *low n*, not amp alone.
@@ -106,8 +106,41 @@ clear only for n≥3.
 - S `grok_success_heatmap` / `grok_epoch_heatmap` — failure cluster guard (amp×n).
 - S `amp_scaling_caveat` — raw ΔCE rises with amp (mechanical confound; use acc_off).
 - S `perf_vs_amp` — conditioned on grok, high amp doesn't cost final accuracy.
+- M `we_spectrum` — final W_E spectrum, amp(rows)×n(cols), injected freqs marked: the comb lands on the injected sites where the model groks; own-power drops as amp rises (offloading), and the amp=2 n∈{1,2} cells (0/4) show diffuse power with no comb.
+- M `ablation` — accuracy oracle ON vs forced OFF over training, amp(rows)×n(cols): the ON-OFF gap WIDENS down the rows (louder oracle ⇒ more dependence, acc_off falls — ~0.97→0.11 at n=3), the trajectory companion to the scalar `dependence_accoff_vs_amp`.
+- S `ce_ablation` — same grid in cross-entropy (log-y, chance=ln p marked): blue (ON) groks to ~0, red (OFF) stays elevated. CAVEAT: the CE gap grows down the rows partly as a measurement artefact — removing a louder oracle mechanically inflates CE (ce_off ~4.8→16 from amp=0.5→4); use the accuracy `ablation` for the amplitude-robust read.
 
-## exp04 — oracle reliability (1.0→0.0), 6 figures ⚠️ contradicts hypothesis
+**Input-vs-output frequency usage (is high-amp laziness a W_E or whole-model property?):**
+The W_E spectrum looks sparser at high amp, but the *whole model* does not use fewer
+freqs — W_E does. Measuring the effective number of injected freqs in use (participation
+ratio `1/Σ share²`) on the **input** (W_E power) vs the **output** (logit coefficient on
+cos(w(x+y−z)), oracle live) shows a clean **crossover**: as amp rises, input N_eff *falls*
+(W_E concentrates: n=8 → 3.9→2.7) while output N_eff *rises* (2.9→4.0) and overtakes it
+(out/in ratio 0.73×→1.45×, monotonic for every n≥3). So at high amp the model's output uses
+**more** distinct injected freqs than W_E encodes — the surplus is read straight from the
+live oracle. **The laziness is a property of W_E, not the whole model.**
+- M `input_vs_output_freqs` — N_eff for W_E (input), W_L (readout weights) and logits (output) vs amp, faceted by n; only W_E falls — the headline (see the W_L note below).
+- M `freq_usage_n8_detail` — per-injected-freq share of W_E vs logit power, one panel per amp (n=8): at amp=4, f17/f25 are tiny in W_E but large in the logits (oracle-supplied); at amp=0.5 the two match.
+
+**Neuron-logit map W_L — the readout-side answer (laziness is W_E-specific):**
+`analysis.wl_fourier_power` computes the Fourier spectrum of the neuron-logit map
+`W_L = W_out^T W_U` over the OUTPUT (answer) tokens — the readout-side mirror of
+the W_E (input) spectrum, per Nanda et al. 2023 (arXiv:2301.05217) — now wired into
+`uptake_snapshot` (`wl_freq_power_full/_injected/_top`, `wl_total_norm`, `wl_gini`)
+for future runs. For this run the `wl_*` fields were **backfilled into each cell's
+final snapshot from its `ep030000.pth` checkpoint** (under `exp02_2/checkpoints/`;
+the checkpoint W_E spectrum matches the stored snapshot exactly, corr=1.0). The
+effective # of injected freqs (N_eff = 1/Σ share²) cleanly separates the three:
+as amp goes 0.5→4 at n=8, **W_E (input) falls 3.9→2.7** (lazy), while **W_L
+(readout weights) rises 4.3→5.2** and the **logits (output) rise 2.9→4.0**. The
+readout is built around ~5 of the 8 injected freqs even when the embedding collapses
+to ~2.7 — so the whole-model machinery uses the injected set regardless of
+amplitude; only W_E offloads. (Also validated on the exp07 frozen-W_E run:
+`run_20260616_110846/figures/exp07/we_vs_wl_spectrum.png` — W_E frozen-flat, W_L
+sharp on the injected freqs.)
+- M `wl_spectrum` — final neuron-logit-map W_L spectrum, amp(rows)×n(cols), injected freqs marked: the amp×n mirror of `we_spectrum`, but the comb on the injected sites stays sharp at high amp (the readout doesn't get lazy).
+
+## exp04 — oracle reliability (1.0→0.0), 8 figures ⚠️ contradicts hypothesis
 **Hypothesis:** higher n (more pairs) gives robustness to corruption.
 **Verdict: contradicted — high n does not rescue low reliability.**
 
@@ -124,8 +157,10 @@ seeded by model seed, so per-seed spread mixes init and corruption randomness.
 - M `uptake_vs_rel` — uptake of the true freqs vs reliability.
 - S `injected_in_key_vs_rel` — true freqs retained in working set vs rel.
 - S `acc_curves_by_rel` — all runs incl failures, exposing the never-grok cluster.
+- M `we_spectrum` — final W_E spectrum, rel(rows)×n(cols), TRUE freqs marked: the comb on the injected sites is clean at high rel and erodes to diffuse noise as rel→0 (the corruption story, made structural).
+- M `ablation` — accuracy with the live oracle ON vs forced OFF over training, rel(rows)×n(cols): wherever a cell groks, ON≈OFF≈1 (the model internalised the solution, barely uses the live oracle); non-grok low-rel cells sit at chance for both.
 
-## exp05 — answer-hint oracle, 6 figures ⚠️ contradicts hypothesis
+## exp05 — answer-hint oracle, 8 figures ⚠️ contradicts hypothesis
 **Hypothesis:** a weak answer hint accelerates learning and simplifies the basis.
 **Verdict: contradicted on acceleration.** NB: the hint leaks the label, so final
 accuracy is trivial — figures use accuracy only for *timing*.
@@ -142,6 +177,8 @@ hint, not the strong (onehot) one.
 - M `laziness_nkeyfreqs` — solution simplification (fourier only).
 - S `laziness_we` — W_E norm + Gini by config.
 - S `spectrum_compare` — hint changes solution *shape*, not just speed.
+- S `we_spectrum` — final W_E spectrum per config (seed spread + mean); the hint injects nothing into W_E, so this shows how the *learned* basis differs (per-config companion to the overlaid `spectrum_compare`).
+- M `ablation` — accuracy live vs hint-ablated over training, per hint config (baseline has no hint to ablate); the hint leaks the label so live→1 trivially, and the live–ablated gap is the dependence — widest for the *fourier* hint (acc_off≈0.12), the trajectory companion to `dependence_accoff`.
 
 _(exp01 and exp06 are covered together in the curated-suite section at the top.)_
 

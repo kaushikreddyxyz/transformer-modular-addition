@@ -107,6 +107,34 @@ def gini(x):
     return float(np.sum((2 * idx - n - 1) * x) / (n * s))
 
 
+def wl_fourier_power(model, config: transformer.Config, fourier_basis=None):
+    """Fourier power per frequency of the neuron-logit map W_L = W_out^T W_U.
+
+    The readout-side mirror of `we_fourier_power`. Where W_E's spectrum is taken
+    over the INPUT number tokens, W_L's is taken over the OUTPUT (answer) tokens:
+    this is the "neuron-logit map" of Nanda et al. 2023 (arXiv:2301.05217),
+    W_L = W_U W_out (P x n_neurons), whose DFT on the logit axis is sparse on the
+    key frequencies in a grokked model. W_L[i, c] is how much MLP neuron i adds
+    to the logit for answer token c; logits = neuron_acts @ W_L (+ bias).
+
+    Returns the same fields as we_fourier_power (freqs, freq_power, const_power,
+    total_norm, gini), so the two spectra are directly comparable.
+    """
+    if fourier_basis is None:
+        fourier_basis = transformer.make_fourier_basis(config)
+    p = config.p
+    W_out = model.blocks[0].mlp.W_out.detach()         # (d_model, d_mlp)
+    W_U = model.unembed.W_U.detach()                   # (d_model, d_vocab)
+    WL = (W_out.t() @ W_U)[:, :p]                       # (d_mlp, p) neurons x answer tokens
+    coeffs = WL @ fourier_basis.T                       # (d_mlp, p_basis)
+    power = coeffs.pow(2).sum(0)                         # (p_basis,)
+    freqs = list(range(1, p // 2 + 1))
+    freq_power = t.stack([power[2 * k - 1] + power[2 * k] for k in freqs]).cpu().numpy()
+    return dict(freqs=np.array(freqs), freq_power=freq_power,
+                const_power=power[0].item(), total_norm=WL.norm().item(),
+                gini=gini(freq_power))
+
+
 # --------------------------------------------------------------------------- #
 # Reused progress measures, restricted to an arbitrary frequency set
 # --------------------------------------------------------------------------- #
@@ -226,6 +254,7 @@ def uptake_snapshot(model, config, ctx, injected_freqs, data=None):
     kf = key_freqs(model, config, ctx)
     inj = [int(f) for f in injected_freqs]
     we = we_fourier_power(model.embed.W_E, config, ctx["fourier_basis"])
+    wl = wl_fourier_power(model, config, ctx["fourier_basis"])
     coeffs = logit_coefficients(model, config, ctx, logits=logits)
     snap = dict(
         key_freqs=kf,
@@ -239,6 +268,11 @@ def uptake_snapshot(model, config, ctx, injected_freqs, data=None):
         we_freq_power_injected=[float(we["freq_power"][k - 1]) for k in inj] if inj else [],
         we_freq_power_top=_top_freqs(we["freq_power"], 6),
         we_freq_power_full=we["freq_power"].tolist(),
+        wl_total_norm=wl["total_norm"],
+        wl_gini=wl["gini"],
+        wl_freq_power_injected=[float(wl["freq_power"][k - 1]) for k in inj] if inj else [],
+        wl_freq_power_top=_top_freqs(wl["freq_power"], 6),
+        wl_freq_power_full=wl["freq_power"].tolist(),
         logit_coeff_injected=[float(coeffs[k - 1]) for k in inj] if inj else [],
         logit_coeff_top=_top_freqs(coeffs, 6),
         logit_coeff_full=coeffs.tolist(),

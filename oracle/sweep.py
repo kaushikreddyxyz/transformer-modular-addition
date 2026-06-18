@@ -2,7 +2,7 @@
 
 Every experiment is a *grid of run specs* (plain JSON-serializable dicts), so
 the same spec can be executed sequentially in a notebook cell, farmed out by
-`experiments/runner.py` across GPU workers, or re-created later to interpret a
+`runner.py` across GPU workers, or re-created later to interpret a
 HuggingFace checkpoint. `execute()` is idempotent: a spec whose result.json
 already exists is skipped, which makes sweeps resumable.
 
