@@ -16,7 +16,7 @@
 # GUARD: every aggregated line/marker figure is ONLY-GROKED — never-grokked
 # seeds are excluded from means and from scatter. The two 0%-grok cells
 # (amp=2,n=1 and amp=2,n=2) therefore vanish from the line figures entirely;
-# the grok heatmap (fig 1) is the one place failures are shown.
+# per-cell grok counts are shown as badges on the spectrum/ablation grids.
 #
 # Usage:  .venv/bin/python modular_addition/oracle/experiments/plot_exp02_2.py [RESULTS_DIR]
 
@@ -37,6 +37,8 @@ EXP = "exp02_2"
 DEFAULT_RES = (_HERE.parents[0] / "results" / "run_20260612_200000")
 RES = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_RES
 OUT = RES / "figures" / EXP
+
+pc.SHOW_CAPTIONS = False          # minimalist: no burned-in captions
 
 
 # --------------------------------------------------------------------------- #
@@ -97,7 +99,7 @@ def _amp_axis(ax, amps):
     ax.set_xticks(amps)
     ax.set_xticklabels([f"{a:g}" for a in amps])
     ax.set_xlim(amps[0] * 0.8, amps[-1] * 1.25)
-    ax.set_xlabel("oracle amplitude")
+    ax.set_xlabel("amplitude")
 
 
 # --------------------------------------------------------------------------- #
@@ -105,6 +107,32 @@ def _amp_axis(ax, amps):
 # the exp04 reliability grids (same idiom: sweep1 down rows, n across cols).
 # --------------------------------------------------------------------------- #
 ON_C, OFF_C = "#1f77b4", "#d62728"
+# Shared per-frequency AMPLITUDE axis (= circle radius = sqrt(power/p)). For W_E
+# this is residual-stream units (= oracle amp); for W_L it is logit-space units.
+AMP_YLIM = (0.0, 2.5)                   # linear, shared across panels
+
+# Injection-site markers: a thin equal-width shaded band centred on each
+# injected freq (replaces dashed verticals -- subtler, reads as a "zone").
+INJ_BAND_HW = 0.6                       # half-width in freq units (band = 1.2 wide)
+                                        # wide enough to stay visible either side of
+                                        # a peak (bands sit under the traces)
+
+
+def _mark_injected(ax, freqs):
+    """Shade an equal-width green band at each injected frequency."""
+    for f in (freqs or []):
+        ax.axvspan(f - INJ_BAND_HW, f + INJ_BAND_HW,
+                   color="green", alpha=0.13, lw=0, zorder=0)
+
+
+def _amp_spectrum(power_full, p):
+    """Per-frequency amplitude = circle radius = sqrt(power / p), in the matrix's
+    native units — the one quantity directly comparable to the oracle amp."""
+    return np.sqrt(np.asarray(power_full, float) / p)
+
+
+def _p_of(runs):
+    return 2 * len(pc.final_snap(runs[0])["we_freq_power_full"]) + 1
 
 
 def _amp_n_grid(amps, ns, panel=(2.55, 1.95), sharey=False):
@@ -122,40 +150,33 @@ def _grok_badge(ax, cell):
 
 
 def fig_we_spectrum(runs, amps, ns, cmap, out):
-    """Final W_E spectrum, amp(rows) x n(cols), injected freqs marked green.
-    Raw power, per-panel y-scale so the comb stays visible across magnitudes."""
-    fig, axes = _amp_n_grid(amps, ns, sharey=False)
+    """W_E per-frequency amplitude sqrt(power/p) (residual units, = oracle amp).
+    Shared linear y-axis; green band = injected freqs."""
+    p = _p_of(runs)
+    fig, axes = _amp_n_grid(amps, ns, sharey=True)
     for i, amp in enumerate(amps):
         for j, n in enumerate(ns):
             ax = axes[i, j]
             cell = pc.select(runs, amp=amp, n=n)
-            specs = [np.asarray(pc.final_snap(r)["we_freq_power_full"], float)
+            specs = [_amp_spectrum(pc.final_snap(r)["we_freq_power_full"], p)
                      for r in cell if pc.final_snap(r).get("we_freq_power_full")]
+            _mark_injected(ax, pc.final_snap(cell[0]).get("injected_freqs"))
             if specs:
                 freqs = np.arange(1, len(specs[0]) + 1)
-                for f in (pc.final_snap(cell[0]).get("injected_freqs") or []):
-                    ax.axvline(f, color="green", ls="--", lw=0.7, alpha=0.5)
                 for sp in specs:
                     ax.plot(freqs, sp, color=cmap[n], alpha=0.22, lw=0.7)
                 ax.plot(freqs, np.mean(specs, 0), color=cmap[n], lw=1.4)
+            ax.set_ylim(*AMP_YLIM)
             _grok_badge(ax, cell)
             if i == 0:
                 ax.set_title(f"n = {n}", fontsize=10)
             if j == 0:
                 ax.set_ylabel(f"amp = {amp:g}", fontsize=9.5)
             ax.tick_params(labelsize=6.5)
-    fig.legend(handles=[Line2D([], [], color="green", ls="--", lw=1.2,
-                               label="injected freqs")],
-               loc="upper right", bbox_to_anchor=(0.998, 0.998), fontsize=8)
-    fig.supxlabel("Fourier frequency index (1..56)")
-    fig.suptitle("Exp02_2 — final W_E Fourier spectrum  (rows: oracle "
-                 "amplitude, cols: n injected pairs)", fontsize=12.5)
-    pc.save(fig, out / "we_spectrum.png", cap=(
-        "Final W_E power spectrum per (amp, n) cell (4 seeds faint + mean; green "
-        "dashed = injected freqs; corner badge = grok count). The comb lands on "
-        "the injected freqs wherever the model groks; as amplitude rises the "
-        "embedding offloads onto the louder oracle (lazier, lower own-power), "
-        "and the amp=2, n in {1,2} cells (0/4 grok) show diffuse power, no comb."))
+    fig.supxlabel("frequency")
+    fig.supylabel("amplitude")
+    fig.suptitle("W_E spectrum", fontsize=12.5)
+    pc.save(fig, out / "we_spectrum.png")
 
 
 def _has_wl(runs):
@@ -164,46 +185,38 @@ def _has_wl(runs):
 
 def fig_wl_spectrum(runs, amps, ns, cmap, out):
     """Final neuron-logit-map spectrum W_L = W_out^T W_U (readout side), amp(rows)
-    x n(cols), injected freqs green. The output-weight mirror of we_spectrum:
+    x n(cols), injected freqs green band. The output-weight mirror of we_spectrum:
     Nanda et al. 2023's 'neuron-logit map', whose DFT on the answer-token axis is
     sparse on the key freqs. Requires the wl_* snapshot fields (re-run needed)."""
     if not _has_wl(runs):
         print("  [fig_wl_spectrum] no wl_freq_power_full in data -- skipping "
               "(re-run exp02_2 with the updated analysis.py to populate it).")
         return
-    fig, axes = _amp_n_grid(amps, ns, sharey=False)
+    p = _p_of(runs)
+    fig, axes = _amp_n_grid(amps, ns, sharey=True)
     for i, amp in enumerate(amps):
         for j, n in enumerate(ns):
             ax = axes[i, j]
             cell = pc.select(runs, amp=amp, n=n)
-            specs = [np.asarray(pc.final_snap(r)["wl_freq_power_full"], float)
+            specs = [_amp_spectrum(pc.final_snap(r)["wl_freq_power_full"], p)
                      for r in cell if pc.final_snap(r).get("wl_freq_power_full")]
+            _mark_injected(ax, pc.final_snap(cell[0]).get("injected_freqs"))
             if specs:
                 freqs = np.arange(1, len(specs[0]) + 1)
-                for f in (pc.final_snap(cell[0]).get("injected_freqs") or []):
-                    ax.axvline(f, color="green", ls="--", lw=0.7, alpha=0.5)
                 for sp in specs:
                     ax.plot(freqs, sp, color=cmap[n], alpha=0.22, lw=0.7)
                 ax.plot(freqs, np.mean(specs, 0), color=cmap[n], lw=1.4)
+            ax.set_ylim(*AMP_YLIM)
             _grok_badge(ax, cell)
             if i == 0:
                 ax.set_title(f"n = {n}", fontsize=10)
             if j == 0:
                 ax.set_ylabel(f"amp = {amp:g}", fontsize=9.5)
             ax.tick_params(labelsize=6.5)
-    fig.legend(handles=[Line2D([], [], color="green", ls="--", lw=1.2,
-                               label="injected freqs")],
-               loc="upper right", bbox_to_anchor=(0.998, 0.998), fontsize=8)
-    fig.supxlabel("Fourier frequency index (1..56)")
-    fig.suptitle("Exp02_2 — final neuron-logit-map spectrum W_L=W_out^T W_U  "
-                 "(readout side; rows: amplitude, cols: n)", fontsize=12.5)
-    pc.save(fig, out / "wl_spectrum.png", cap=(
-        "Final neuron-logit-map W_L = W_out^T W_U Fourier power per (amp, n) cell, "
-        "decomposed over the OUTPUT (answer) tokens -- the readout-side mirror of "
-        "we_spectrum (Nanda et al. 2023). Green dashed = injected freqs; badge = "
-        "grok count. Unlike W_E, the readout stays sharply tuned to (most of) the "
-        "injected freqs even at high amplitude: the model's output machinery uses "
-        "them; only the input embedding offloads."))
+    fig.supxlabel("frequency")
+    fig.supylabel("amplitude (logit units)")
+    fig.suptitle("W_L spectrum", fontsize=12.5)
+    pc.save(fig, out / "wl_spectrum.png")
 
 
 def fig_ablation(runs, amps, ns, out):
@@ -234,13 +247,12 @@ def fig_ablation(runs, amps, ns, out):
             if j == 0:
                 ax.set_ylabel(f"amp = {amp:g}", fontsize=9.5)
             ax.tick_params(labelsize=6.5)
-    fig.legend(handles=[Line2D([], [], color=ON_C, lw=2, label="oracle live (ON)"),
-                        Line2D([], [], color=OFF_C, lw=2, label="oracle forced OFF")],
+    fig.legend(handles=[Line2D([], [], color=ON_C, lw=2, label="oracle ON"),
+                        Line2D([], [], color=OFF_C, lw=2, label="oracle OFF")],
                loc="upper right", bbox_to_anchor=(0.998, 0.998), fontsize=8)
-    fig.supxlabel("epoch (log)")
-    fig.supylabel("test accuracy")
-    fig.suptitle("Exp02_2 — causal use of the live oracle, ON vs OFF  (rows: "
-                 "oracle amplitude, cols: n)", fontsize=12.5)
+    fig.supxlabel("epoch")
+    fig.supylabel("accuracy")
+    fig.suptitle("ablation: oracle ON vs OFF", fontsize=12.5)
     pc.save(fig, out / "ablation.png", cap=(
         "Accuracy with the live oracle ON (blue) vs forced OFF at inference "
         "(red), per (amp, n) cell (4 seeds + mean; badge = grok count). The "
@@ -282,14 +294,13 @@ def fig_ce_ablation(runs, amps, ns, out):
                 ax.set_ylabel(f"amp = {amp:g}", fontsize=9.5)
             ax.tick_params(labelsize=6.5)
     fig.legend(handles=[
-        Line2D([], [], color=ON_C, lw=2, label="oracle live (ON)"),
-        Line2D([], [], color=OFF_C, lw=2, label="oracle forced OFF"),
-        Line2D([], [], color="0.6", ls=":", lw=1.2, label="chance CE = ln p")],
+        Line2D([], [], color=ON_C, lw=2, label="oracle ON"),
+        Line2D([], [], color=OFF_C, lw=2, label="oracle OFF"),
+        Line2D([], [], color="0.6", ls=":", lw=1.2, label="chance")],
         loc="upper right", bbox_to_anchor=(0.998, 0.998), fontsize=8)
-    fig.supxlabel("epoch (log)")
-    fig.supylabel("test cross-entropy")
-    fig.suptitle("Exp02_2 — test cross-entropy with the live oracle ON vs OFF  "
-                 "(rows: oracle amplitude, cols: n)", fontsize=12.5)
+    fig.supxlabel("epoch")
+    fig.supylabel("cross-entropy")
+    fig.suptitle("ablation (CE): oracle ON vs OFF", fontsize=12.5)
     pc.save(fig, out / "ce_ablation.png", cap=(
         "Test cross-entropy with the live oracle ON (blue) vs forced OFF at "
         "inference (red), per (amp, n) cell (4 seeds + mean; badge = grok count; "
@@ -333,22 +344,6 @@ def _neff_wl(snap):
     return _neff_injected(fp, inj) if (inj and fp) else np.nan
 
 
-def _inj_shares(cell, side):
-    """Mean (over grokked seeds) share-of-injected-power per injected freq.
-    side: 'we' (W_E power) or 'lg' (logit coeff²). Returns {freq: mean_share}."""
-    acc = {}
-    for r in cell:
-        sn = pc.final_snap(r)
-        inj = sn.get("injected_freqs") or []
-        pw = (np.asarray(sn["we_freq_power_full"], float) if side == "we"
-              else np.asarray(sn["logit_coeff_full"], float) ** 2)
-        sub = pw[[f - 1 for f in inj]]
-        tot = sub.sum()
-        for f, v in zip(inj, sub):
-            acc.setdefault(f, []).append(v / tot if tot > 0 else 0.0)
-    return {f: float(np.mean(v)) for f, v in acc.items()}
-
-
 def fig_input_vs_output_freqs(runs, amps, ns, out):
     """Effective # of injected freqs used by the INPUT (W_E) vs the OUTPUT
     (logits) vs amplitude. Output > input => the model uses freqs W_E never
@@ -385,23 +380,19 @@ def fig_input_vs_output_freqs(runs, amps, ns, out):
                 color="0.5", fontsize=8)
         ax.set_xticks(xs)
         ax.set_xticklabels([f"{a:g}" for a in amps])
-        ax.set_title(f"n = {n} injected pairs", fontsize=10)
+        ax.set_title(f"n = {n}", fontsize=10)
         ax.set_ylim(0.8, n + 0.5)
     for ax in axes.flat[len(use_ns):]:
         ax.set_visible(False)
-    handles = [Line2D([], [], color=IN_C, lw=2, marker="o",
-                      label="W_E  (input / embedding weights)"),
-               Line2D([], [], color=OUT_C, lw=2, marker="s",
-                      label="logits  (realized output)")]
+    handles = [Line2D([], [], color=IN_C, lw=2, marker="o", label="W_E"),
+               Line2D([], [], color=OUT_C, lw=2, marker="s", label="logits")]
     if has_wl:
-        handles.append(Line2D([], [], color=WL_C, lw=2, marker="^",
-                              label="W_L  (readout weights, W_out·W_U)"))
+        handles.append(Line2D([], [], color=WL_C, lw=2, marker="^", label="W_L"))
     fig.legend(handles=handles, loc="upper right",
                bbox_to_anchor=(0.998, 0.998), fontsize=9)
-    fig.supxlabel("oracle amplitude")
-    fig.supylabel("effective # of injected freqs used  (1 / Σ share²)")
-    fig.suptitle("Exp02_2 — does the WHOLE MODEL use the freqs W_E drops?  "
-                 "input (W_E) vs readout (W_L) vs output (logits)", fontsize=12.5)
+    fig.supxlabel("amplitude")
+    fig.supylabel("freqs used (N_eff)")
+    fig.suptitle("frequencies used: W_E vs W_L vs logits", fontsize=12.5)
     pc.save(fig, out / "input_vs_output_freqs.png", cap=(
         "Effective number of injected frequencies in use = participation ratio "
         "1/Σ(share²) over the injected set, grokked seeds only, for: the INPUT "
@@ -414,41 +405,51 @@ def fig_input_vs_output_freqs(runs, amps, ns, out):
         "live oracle. => the laziness is a property of W_E, not the whole model."))
 
 
-def fig_freq_usage_detail(runs, amps, out, n=8):
-    """Per-injected-frequency share of W_E power vs logit power, one panel per
-    amplitude (the per-freq evidence behind input_vs_output_freqs)."""
-    cells = {amp: [r for r in pc.select(runs, amp=amp, n=n) if pc.groked(r)]
-             for amp in amps}
-    base = cells[amps[0]]
-    we_base = _inj_shares(base, "we")
-    order = sorted(we_base, key=lambda f: -we_base[f])     # fixed across panels
-    x = np.arange(len(order))
-    w = 0.4
-    fig, axes = plt.subplots(1, len(amps), figsize=(3.6 * len(amps), 4.1),
-                             sharey=True, squeeze=False)
-    for ax, amp in zip(axes[0], amps):
-        we_s = _inj_shares(cells[amp], "we")
-        lg_s = _inj_shares(cells[amp], "lg")
-        ax.bar(x - w / 2, [we_s.get(f, 0) for f in order], w, color=IN_C,
-               label="W_E (input)")
-        ax.bar(x + w / 2, [lg_s.get(f, 0) for f in order], w, color=OUT_C,
-               label="logits (output)")
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"f{f}" for f in order], rotation=45, fontsize=7)
+def fig_contribution_decomp(runs, amps, out, n=8):
+    """BUILD vs GROUND TRUTH (residual units), n injected pairs, columns = amp.
+    Green ceiling at y=amp is the oracle's KNOWN per-freq contribution; blue stems
+    are what W_E rebuilds at each injected freq; the gap is oracle-supplied. Metric
+    s = <W_E amp at injected>/amp = self-supply fraction (1 => W_E rebuilds the whole
+    oracle freq; 0 => pure free-riding). s FALLS as amp rises => the live oracle
+    supplies the rest ('the other contribution').
+
+    W_E-only on purpose: W_L's absolute amplitude is gauge-free (ReLU lets W_in/c,
+    W_out*c leave the model identical while W_L scales by c), so it has no fixed
+    ruler and can NOT be put on the same residual axis as the oracle. Only W_E is
+    anchored (read against the frozen oracle in the residual stream)."""
+    p = _p_of(runs)
+    L = (p - 1) // 2
+
+    def mean_snap(cell, fn):
+        return np.mean([fn(pc.final_snap(r)) for r in cell], 0)
+
+    fig, axes = plt.subplots(1, len(amps), figsize=(3.2 * len(amps), 2.9),
+                             sharex=True, sharey=False, squeeze=False)
+    for j, amp in enumerate(amps):
+        cell = [r for r in pc.select(runs, amp=amp, n=n) if pc.groked(r)]
+        ax = axes[0][j]
         ax.set_title(f"amp = {amp:g}", fontsize=10)
-    axes[0][0].set_ylabel("share of injected-set power")
-    axes[0][0].legend(fontsize=8.5, frameon=True)
-    fig.supxlabel(f"injected frequencies (n={n}), ordered by W_E share at "
-                  f"amp={amps[0]:g}")
-    fig.suptitle(f"Exp02_2 — per-frequency input vs output share "
-                 f"(n={n}, grokked-seed mean)", fontsize=12)
-    pc.save(fig, out / f"freq_usage_n{n}_detail.png", cap=(
-        "Share of the injected-set power on each injected frequency, in W_E "
-        "(blue, input) vs the logits (orange, output), grokked-seed mean. At low "
-        "amp the two roughly match (the model builds in W_E what it outputs). As "
-        "amp rises W_E's share concentrates onto 2-3 freqs while the output keeps "
-        "spreading across ~6: frequencies where orange >> blue are used by the "
-        "model yet barely encoded by W_E -- supplied by the live oracle."))
+        if not cell:
+            continue
+        inj = pc.final_snap(cell[0]).get("injected_freqs") or []
+        ii = [f - 1 for f in inj]                       # injected_freqs are 1-indexed
+        we_amp = mean_snap(cell, lambda s: _amp_spectrum(s["we_freq_power_full"], p))
+        ax.hlines(amp, 0.5, L + 0.5, color="green", lw=1.1, alpha=0.6)
+        ax.vlines(inj, we_amp[ii], amp, color="green", lw=2.0, alpha=0.22)   # gap
+        ax.vlines(inj, 0, we_amp[ii], color=IN_C, lw=2.2)                    # W_E built
+        ax.scatter(inj, we_amp[ii], color=IN_C, s=14, zorder=3)
+        ax.set_ylim(0, amp * 1.12)                      # green ceiling near top
+        s_frac = float(np.mean(we_amp[ii]) / amp)
+        ax.text(0.95, 0.93, f"s={s_frac:.2f}", transform=ax.transAxes,
+                ha="right", va="top", fontsize=9, color=IN_C, weight="bold")
+    axes[0][0].set_ylabel("amplitude (residual)")
+    axes[0][0].legend(handles=[
+        Line2D([], [], color=IN_C, lw=2, label="W_E built"),
+        Line2D([], [], color="green", lw=2, label="oracle = amp")],
+        loc="upper left", fontsize=7, framealpha=0.9)
+    fig.supxlabel("frequency")
+    fig.suptitle(f"the other contribution (n = {n})", fontsize=12.5)
+    pc.save(fig, out / f"contribution_decomp_n{n}.png")
 
 
 # =========================================================================== #
@@ -468,100 +469,33 @@ def main():
     print(f"grokked {n_grok}/{n_total} ({n_total - n_grok} failures)")
 
     # ----------------------------------------------------------------------- #
-    # FIG 1a — grok-success heatmap (amp rows x n cols)
-    # ----------------------------------------------------------------------- #
-    grok = np.full((len(amps), len(ns)), np.nan)
-    nseed = np.zeros((len(amps), len(ns)), dtype=int)
-    for i, amp in enumerate(amps):
-        for j, n in enumerate(ns):
-            cell = pc.select(runs, amp=amp, n=n)
-            nseed[i, j] = len(cell)
-            grok[i, j] = pc.grok_rate(cell)
-
-    fig, ax = plt.subplots(figsize=(7.2, 4.4))
-    im = ax.imshow(grok, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
-    ax.set_xticks(range(len(ns)))
-    ax.set_xticklabels([str(n) for n in ns])
-    ax.set_yticks(range(len(amps)))
-    ax.set_yticklabels([f"{a:g}" for a in amps])
-    ax.set_xlabel("n  (# injected freq pairs)")
-    ax.set_ylabel("oracle amplitude")
-    ax.set_title("Grok success rate  (fraction of 4 seeds that grokked)")
-    ax.grid(False)
-    for i in range(len(amps)):
-        for j in range(len(ns)):
-            v = grok[i, j]
-            k = int(round(v * nseed[i, j]))
-            txt = f"{v:.2f}\n{k}/{nseed[i, j]}"
-            ax.text(j, i, txt, ha="center", va="center", fontsize=9,
-                    color="black" if 0.25 < v < 0.85 else "white",
-                    fontweight="bold")
-    cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
-    cb.set_label("grok rate")
-    pc.save(fig, OUT / "grok_success_heatmap.png", cap=(
-        "Fig 1a. Grok-success rate per (amp, n) cell; annotation = rate and "
-        "grokked/total seeds. FAILURE CLUSTER at low n (1-2): amp=2 fails "
-        "ENTIRELY at n=1 and n=2 (0/4 both), and amp in {1,4} grok partially "
-        "there. n>=3 always groks. This destabilisation is the headline AND the "
-        "confound guard: those cells are excluded from all line figures below."))
-
-    # ----------------------------------------------------------------------- #
-    # FIG 1b — median grok_epoch over grokked seeds per cell
-    # ----------------------------------------------------------------------- #
-    gep = np.full((len(amps), len(ns)), np.nan)
-    for i, amp in enumerate(amps):
-        for j, n in enumerate(ns):
-            cell = [pc.grok_epoch(r) for r in pc.select(runs, amp=amp, n=n)
-                    if pc.groked(r)]
-            if cell:
-                gep[i, j] = float(np.median(cell))
-
-    fig, ax = plt.subplots(figsize=(7.2, 4.4))
-    im = ax.imshow(gep, cmap="viridis_r", aspect="auto")
-    ax.set_xticks(range(len(ns)))
-    ax.set_xticklabels([str(n) for n in ns])
-    ax.set_yticks(range(len(amps)))
-    ax.set_yticklabels([f"{a:g}" for a in amps])
-    ax.set_xlabel("n  (# injected freq pairs)")
-    ax.set_ylabel("oracle amplitude")
-    ax.set_title("Median grok epoch  (over grokked seeds)")
-    ax.grid(False)
-    finite = gep[np.isfinite(gep)]
-    mid = (finite.min() + finite.max()) / 2 if finite.size else 0
-    for i in range(len(amps)):
-        for j in range(len(ns)):
-            v = gep[i, j]
-            if np.isfinite(v):
-                ax.text(j, i, f"{v:.0f}", ha="center", va="center", fontsize=9,
-                        color="white" if v > mid else "black", fontweight="bold")
-            else:
-                ax.text(j, i, "—", ha="center", va="center", fontsize=11,
-                        color="0.7")
-    cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
-    cb.set_label("median grok epoch")
-    pc.save(fig, OUT / "grok_epoch_heatmap.png", cap=(
-        "Fig 1b. Median grok epoch over the grokked seeds in each cell "
-        "(em-dash = no seed grokked, i.e. amp=2 at n=1,2). Companion to Fig 1a: "
-        "where the model does grok, low n tends to grok later; amplitude has a "
-        "weaker, less monotonic effect on timing than on success."))
-
-    # ----------------------------------------------------------------------- #
     # FIG 2 — laziness: final |W_E| vs amp (only-grokked)
     # ----------------------------------------------------------------------- #
+    sp = np.sqrt(_p_of(runs))
     fig, ax = plt.subplots(figsize=(7.0, 4.6))
-    c2 = _seed_scatter_vs_amp(
-        ax, runs, lambda r: _final_scalar(r, lambda s: s.get("we_total_norm")),
+    _seed_scatter_vs_amp(
+        ax, runs,
+        lambda r: (lambda v: v / sp if v is not None else None)(
+            _final_scalar(r, lambda s: s.get("we_total_norm"))),
         amps, ns, cmap)
     _amp_axis(ax, amps)
-    ax.set_ylabel("final |W_E|  (we_total_norm)")
-    ax.set_title("Laziness — embedding norm vs oracle amplitude (grokked only)")
+    # oracle total per-token contribution amp*sqrt(n) -- SAME residual units
+    amp_grid = np.array(amps, float)
+    for n in ns:
+        ax.plot(amp_grid, amp_grid * np.sqrt(n), color=cmap[n], ls=":", lw=1.2,
+                alpha=0.7)
+    ax.plot([], [], color="0.4", ls=":", lw=1.2, label="oracle total = amp·√n")
+    ax.set_yscale("log")
+    ax.set_ylabel("‖W_E‖/√p")
+    ax.set_title("W_E norm vs amplitude")
     ax.legend(title="freq pairs", ncol=2, fontsize=8, framealpha=0.9)
     pc.save(fig, OUT / "laziness_we_norm_vs_amp.png", cap=(
-        "Fig 2. Final trainable embedding norm |W_E| vs amplitude; diamonds=seed "
-        "mean, dots=individual grokked seeds (jittered), colour=n. Only grokked "
-        "seeds shown (amp=2,n in{1,2} therefore absent). If laziness holds, |W_E| "
-        "should DROP as amp rises - the embedding offloads work onto the louder "
-        "oracle."))
+        "Fig 2. Final embedding per-token norm ‖W_E‖/√p (residual-stream units — "
+        "the aggregate √-sum of the per-frequency amplitudes) vs amplitude; "
+        "diamonds=seed mean, dots=grokked seeds, colour=n. Dotted = the oracle's "
+        "total per-token contribution amp·√n in the SAME units. ‖W_E‖ DROPS as amp "
+        "rises while the oracle total climbs steeply: the embedding offloads onto "
+        "the louder oracle. (amp=2, n in {1,2} absent — never grok.)"))
 
     # ----------------------------------------------------------------------- #
     # FIG 3 — laziness: final frac W_E power on injected freqs vs amp
@@ -571,8 +505,8 @@ def main():
         ax, runs, lambda r: _final_scalar(r, pc.frac_we_power_injected),
         amps, ns, cmap)
     _amp_axis(ax, amps)
-    ax.set_ylabel("final frac W_E power on injected freqs")
-    ax.set_title("Laziness — W_E uptake of injected freqs vs amplitude (grokked only)")
+    ax.set_ylabel("uptake")
+    ax.set_title("uptake vs amplitude")
     ax.legend(title="freq pairs", ncol=2, fontsize=8, framealpha=0.9)
     pc.save(fig, OUT / "laziness_uptake_vs_amp.png", cap=(
         "Fig 3. Fraction of W_E Fourier power sitting ON the injected freqs vs "
@@ -590,8 +524,8 @@ def main():
         amps, ns, cmap)
     _amp_axis(ax, amps)
     ax.axhline(1.0, color="0.6", ls=":", lw=1.0)
-    ax.set_ylabel("final ablation acc_off  (accuracy w/ oracle OFF)")
-    ax.set_title("Dependence — accuracy with the oracle ablated (grokked only)")
+    ax.set_ylabel("acc (oracle off)")
+    ax.set_title("dependence vs amplitude")
     ax.legend(title="freq pairs", ncol=2, fontsize=8, framealpha=0.9)
     pc.save(fig, OUT / "dependence_accoff_vs_amp.png", cap=(
         "Fig 4. THE dependence metric: test accuracy with the oracle turned OFF "
@@ -610,8 +544,8 @@ def main():
     _amp_axis(ax, amps)
     ax.set_yscale("symlog", linthresh=0.05)
     ax.axhline(0.0, color="0.6", ls=":", lw=1.0)
-    ax.set_ylabel("final ablation ΔCE = ce_off − ce_on   (symlog)")
-    ax.set_title("CAVEAT — raw ablation ΔCE vs amplitude (measurement confound)")
+    ax.set_ylabel("ΔCE (ce_off − ce_on)")
+    ax.set_title("ΔCE vs amplitude (confound)")
     ax.legend(title="freq pairs", ncol=2, fontsize=8, framealpha=0.9)
     pc.save(fig, OUT / "amp_scaling_caveat.png", cap=(
         "Fig 5. CAVEAT FIGURE. Raw ablation ΔCE (ce_off−ce_on) scales with "
@@ -626,8 +560,8 @@ def main():
     fig, ax = plt.subplots(figsize=(7.0, 4.6))
     _seed_scatter_vs_amp(ax, runs, _final_test_acc, amps, ns, cmap)
     _amp_axis(ax, amps)
-    ax.set_ylabel("final test accuracy")
-    ax.set_title("Performance — final test accuracy vs amplitude (grokked only)")
+    ax.set_ylabel("accuracy")
+    ax.set_title("accuracy vs amplitude")
     ax.legend(title="freq pairs", ncol=2, fontsize=8, framealpha=0.9,
               loc="lower left")
     pc.save(fig, OUT / "perf_vs_amp.png", cap=(
@@ -649,7 +583,7 @@ def main():
     # high-amp laziness a W_E property or a whole-model property?
     # ----------------------------------------------------------------------- #
     fig_input_vs_output_freqs(runs, amps, ns, OUT)
-    fig_freq_usage_detail(runs, amps, OUT, n=8)
+    fig_contribution_decomp(runs, amps, OUT, n=8)
 
     # ----------------------------------------------------------------------- #
     print(f"\nwrote figures to {OUT}")

@@ -15,20 +15,23 @@ and the exp01 ↔ exp02 cross-references work per-directory, use
 (e.g. train exp01 now, add exp02_1 into the same dir tomorrow); a fresh
 timestamped dir always starts from zero.
 
-Execution: a multiprocessing pool (spawn — CUDA-safe). The tiny grokking
-models use a small slice of a modern GPU, so several runs share one device
-profitably (`--workers` processes round-robined over `--gpus`).
+Execution (default): STACKED training via ModelGrid — co-stackable specs train
+together as one batched model per GPU stack (grokking models are launch-bound,
+so this fills the SMs and is much faster than one-process-per-model). Specs the
+batched forward can't faithfully reproduce fall back to the per-model path
+automatically. `--per-model` restores the legacy spawn pool (`--workers`
+processes round-robined over `--gpus`).
 
 Usage (on the GPU box, from the repo root):
   python -m modular_addition.oracle.runner --dry-run
-  python -m modular_addition.oracle.runner --workers 10
-  python -m modular_addition.oracle.runner \
-      --exps exp06 --workers 6 --gpus 0,1
+  python -m modular_addition.oracle.runner                  # stacked (default)
+  python -m modular_addition.oracle.runner --exps exp06 --stack-size 32
+  python -m modular_addition.oracle.runner --per-model --workers 10  # legacy
   python -m modular_addition.oracle.runner \
       --results-dir modular_addition/oracle/results/run_20260610_120000
 
 After training: run each experiment file's summary cells for summary.json,
-then experiments/make_figures.py, then oracle/push_to_hf.py.
+then plotting/make_figures.py, then oracle/push_to_hf.py.
 """
 import os
 
@@ -142,6 +145,13 @@ def main():
     ap.add_argument("--force", action="store_true",
                     help="re-run specs whose result.json already exists")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--per-model", action="store_true",
+                    help="legacy path: one process per model via a worker pool "
+                         "(default is stacked/batched training via ModelGrid)")
+    ap.add_argument("--stack-size", type=int, default=None,
+                    help="max models per stack (default: memory-derived)")
+    ap.add_argument("--target-gb", type=float, default=14.0,
+                    help="VRAM budget per stack used to size chunks")
     args = ap.parse_args()
 
     run_dir = (Path(args.results_dir) if args.results_dir
@@ -169,6 +179,37 @@ def main():
     run_dir.mkdir(parents=True, exist_ok=True)
     _point_latest(run_dir)
 
+    t0 = time.time()
+    if args.per_model:
+        run_pool(specs, args)
+    else:
+        run_stacked(specs, run_dir, args)
+    print(f"\ndone in {(time.time() - t0) / 3600:.2f}h → {run_dir}")
+
+
+def run_stacked(specs, run_dir, args):
+    """Default path: batch co-stackable specs into a few GPU stacks (ModelGrid),
+    routing anything unstackable to the per-model path automatically."""
+    import torch
+    from modular_addition.oracle.training import grid
+    if args.gpus:
+        device = torch.device(f"cuda:{args.gpus.split(',')[0]}")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        from modular_addition.oracle import sweep
+        device = sweep.pick_device()
+    g = grid.ModelGrid(specs, stack_size=args.stack_size, target_gb=args.target_gb)
+    print(g.plan())
+    print(f"device: {device}")
+    counts = g.run(device, results_dir=str(run_dir),
+                   use_wandb=not args.no_wandb, force=args.force, progress=True)
+    print(f"{counts['trained']} trained, {counts['skip']} skipped, "
+          f"{counts['fallback']} via per-model fallback")
+
+
+def run_pool(specs, args):
+    """Legacy path: one process per model across a spawn pool of workers."""
     import torch
     if args.gpus:
         gpus = [f"cuda:{g}" for g in args.gpus.split(",")]
@@ -182,7 +223,6 @@ def main():
     import multiprocessing as mp
     from tqdm.auto import tqdm
     ctx = mp.get_context("spawn")
-    t0 = time.time()
     counts = {"trained": 0, "skip": 0, "FAIL": 0}
     bar = tqdm(total=len(jobs), desc="models", unit="model", smoothing=0.05)
     with ctx.Pool(processes=args.workers) as pool:
@@ -193,9 +233,8 @@ def main():
                             failed=counts["FAIL"])
             tqdm.write(f"[{bar.n:>4}/{len(jobs)}] {exp}/{label}: {status} ({info})")
     bar.close()
-    print(f"\ndone in {(time.time() - t0) / 3600:.2f}h — "
-          f"{counts['trained']} trained, {counts['skip']} skipped, "
-          f"{counts['FAIL']} failed → {run_dir}")
+    print(f"{counts['trained']} trained, {counts['skip']} skipped, "
+          f"{counts['FAIL']} failed")
     if counts["FAIL"]:
         sys.exit(1)
 

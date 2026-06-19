@@ -19,7 +19,8 @@ import numpy as np
 import torch as t
 
 from modular_addition import transformer
-from modular_addition.oracle import analysis, harness, inject
+from modular_addition.oracle import analysis, inject
+from modular_addition.oracle.training import harness
 
 SEEDS = [0, 1, 2, 3]
 N_LIST = [0, 1, 2, 3, 5, 6, 8]          # oracle frequency pairs; 0 = baseline
@@ -95,6 +96,45 @@ def make_config(*, seed=0, p=113, d_model=128, num_epochs=NUM_EPOCHS,
 
 
 # --------------------------------------------------------------------------- #
+# Organic-oracle donor loading (exp09): lift a baseline's learned W_E
+# --------------------------------------------------------------------------- #
+def _results_base():
+    """Static results/ dir (NOT the env-overridable run dir): donors are read
+    from a fixed historical run regardless of where the new run writes."""
+    return Path(__file__).resolve().parent / "results"
+
+
+def load_donor_we(source_run, source_exp, source_label, source_epoch, device=None):
+    """Final trainable embedding ``W_E`` (d_model, d_vocab) of a donor checkpoint.
+
+    Resolves ``results/<run>/<exp>/checkpoints/<label>/ep<epoch:06d>.pth`` and
+    pulls ``embed.W_E`` — a pure-weight quantity, so no model rebuild is needed.
+    """
+    ck = (_results_base() / source_run / source_exp / "checkpoints"
+          / source_label / f"ep{int(source_epoch):06d}.pth")
+    if not ck.exists():
+        raise FileNotFoundError(f"organic_we donor checkpoint not found: {ck}")
+    sd = t.load(ck, map_location="cpu", weights_only=False)
+    sd = sd["model"] if isinstance(sd, dict) and "model" in sd else sd
+    W_E = sd["embed.W_E"].float()                      # (d_model, d_vocab)
+    return W_E.to(device) if device is not None else W_E
+
+
+def donor_key_freqs(W_E, cfg, amp_frac=0.5):
+    """Donor's dominant Fourier modes: freqs whose per-freq amplitude sqrt(power/p)
+    is >= `amp_frac` * the max per-freq amplitude. A grokked p=113 model's ~5 key
+    freqs sit well above the rest, so amp_frac=0.5 isolates them cleanly. Used as
+    the organic oracle's `injected_freqs` so the uptake metrics know what to score
+    ("did the student reuse the donor's actual frequencies?")."""
+    fp = analysis.we_fourier_power(W_E, cfg)["freq_power"]   # (p//2,)
+    amp = np.sqrt(np.asarray(fp, dtype=float) / cfg.p)
+    if amp.size == 0 or amp.max() <= 0:
+        return []
+    keep = np.where(amp >= amp_frac * amp.max())[0]
+    return [int(k + 1) for k in keep]                  # 1-indexed frequencies
+
+
+# --------------------------------------------------------------------------- #
 # Oracle factory: JSON spec -> (oracle_fn, injected_freqs)
 # --------------------------------------------------------------------------- #
 def build_oracle(ospec, cfg):
@@ -103,6 +143,9 @@ def build_oracle(ospec, cfg):
     kinds:
       none                — baseline
       fourier             — frozen per-token Fourier features at fixed freqs
+      organic_we          — frozen per-token table = a donor baseline's learned
+                            W_E^T (scaled by `scale`), injected verbatim; the
+                            "injected_freqs" are the donor's own dominant modes
       perexample_corrupt  — per-example freqs: base freq with prob `reliability`,
                             else uniform random (one independently corrupted map
                             per pair); `map_seed` controls the corruption draw
@@ -111,6 +154,18 @@ def build_oracle(ospec, cfg):
     kind = (ospec or {}).get("kind", "none")
     if kind == "none":
         return None, []
+    if kind == "organic_we":
+        W_E = load_donor_we(ospec["source_run"], ospec.get("source_exp", "exp01"),
+                            ospec["source_label"], ospec.get("source_epoch", 30000),
+                            device=cfg.device)            # (d_model, d_vocab)
+        scale = float(ospec.get("scale", 1.0))
+        if not ospec.get("include_eq", True):
+            W_E = W_E.clone()
+            W_E[:, cfg.p:] = 0.0                          # zero "=" / pad tokens
+        inj = donor_key_freqs(W_E, cfg, ospec.get("key_amp_frac", 0.5))
+        table = (scale * W_E).t().contiguous()            # (d_vocab, d_model)
+        return inject.make_table_oracle(cfg, table, injected_freqs=inj,
+                                        kind="organic_we"), inj
     amp = ospec.get("amp", AMP_DEFAULT)
     if kind == "fourier":
         freqs = ospec["freqs"]

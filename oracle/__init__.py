@@ -21,7 +21,8 @@ from modular_addition.oracle.inject import (
     freq_map_jitter,
     make_answer_hint_oracle,
 )
-from modular_addition.oracle import analysis, harness, sweep
+from modular_addition.oracle import analysis, sweep
+from modular_addition.oracle.training import grid, harness, stacked, stacked_analysis
 
 __all__ = [
     "OracleTransformer",
@@ -33,6 +34,9 @@ __all__ = [
     "freq_map_jitter",
     "make_answer_hint_oracle",
     "analysis",
+    "grid",
     "harness",
+    "stacked",
+    "stacked_analysis",
     "sweep",
 ]

@@ -7,7 +7,8 @@
 # weight-decay pressure is weak, and where is the wd floor below which even the
 # oracle can't get the model to grok within 25k epochs?
 #
-#   headline:  we_spectrum_by_wd.png   final W_E power spectrum per wd (the ask)
+#   headline:  we_spectrum_by_wd.png   final W_E amplitude spectrum per wd (the ask)
+#   readout:   wl_spectrum_by_wd.png   final W_L amplitude spectrum per wd (mirror)
 #   uptake:    uptake_vs_wd.png         final W_E power frac on injected freqs
 #   ablation:  dependence_vs_wd.png     final acc oracle ON vs OFF (live dep.)
 #   the floor: grok_dynamics_by_wd.png  test_acc vs epoch, all seeds, per wd
@@ -65,17 +66,23 @@ def wd_tag(sel):
     return "" if gk == len(sel) else f"  ({gk}/{len(sel)} grok)"
 
 
+def _amp_spectrum(power_full, p):
+    """Per-frequency amplitude = sqrt(power / p), in W_E's native residual units
+    — directly comparable to the oracle amp (matches exp02_2's convention)."""
+    return np.sqrt(np.asarray(power_full, float) / p)
+
+
 # %% ----------------------------------------------------------------- #
-# FIG 1 (headline) — final W_E power spectrum, one panel per weight decay
+# FIG 1 (headline) — final W_E amplitude spectrum, one panel per weight decay
 # --------------------------------------------------------------------- #
 ncol = min(len(WDS), 3)
 nrow = int(np.ceil(len(WDS) / ncol))
 fig, axes = plt.subplots(nrow, ncol, figsize=(4.7 * ncol, 2.9 * nrow),
-                         squeeze=False)
+                         sharey=True, squeeze=False)
 freqs = np.arange(1, L + 1)
 for ax, wd in zip(axes.flat, WDS):
     sel = pc.select(runs, weight_decay=wd)
-    specs = [np.asarray(pc.final_snap(r)["we_freq_power_full"], float)
+    specs = [_amp_spectrum(pc.final_snap(r)["we_freq_power_full"], P)
              for r in sel if pc.final_snap(r).get("we_freq_power_full")]
     if not specs:
         continue
@@ -85,20 +92,66 @@ for ax, wd in zip(axes.flat, WDS):
     for sp in specs:
         ax.plot(freqs, sp, color=COL[wd], alpha=0.3, lw=0.9)
     ax.plot(freqs, np.mean(specs, 0), color=COL[wd], lw=1.8)
+    ax.set_ylim(bottom=0)                       # amplitude is non-negative
     ax.set_title(f"wd = {wd:g}{wd_tag(sel)}", fontsize=10)
     ax.legend(loc="upper right", fontsize=7.5, frameon=True)
 for ax in axes.flat[len(WDS):]:
     ax.set_visible(False)
 fig.supxlabel(f"Fourier frequency index (1..{L})")
-fig.supylabel("final W_E power")
-fig.suptitle(f"Exp08 — final W_E power spectrum vs weight decay (p={P}, "
+fig.supylabel("final W_E amplitude  √(power/p)  (residual units)")
+fig.suptitle(f"Exp08 — final W_E amplitude spectrum vs weight decay (p={P}, "
              f"n={N_FIXED} fixed injected pairs)", fontsize=12.5)
 pc.save(fig, FIG / "we_spectrum_by_wd.png", cap=(
-    f"Final W_E Fourier power spectrum ({L} freqs) per weight decay; 4 seeds "
-    "faint + mean bold, green dashed = the (fixed) injected frequencies. With a "
-    "trainable embedding the power concentrates on the injected sites; this "
-    "panel shows whether weakening weight decay flattens that concentration or "
-    f"raises off-target leakage. {WD_NOTE}"))
+    f"Final W_E per-frequency amplitude √(power/p) ({L} freqs, residual units — "
+    "directly comparable to the oracle amp=1.0) per weight decay; 4 seeds faint + "
+    "mean bold, shared y-axis, green dashed = the (fixed) injected frequencies. "
+    "With a trainable embedding the amplitude concentrates on the injected sites; "
+    "this panel shows whether weakening weight decay flattens that concentration "
+    f"or raises off-target leakage. {WD_NOTE}"))
+
+
+# %% ----------------------------------------------------------------- #
+# FIG 1b (readout mirror) — final W_L = W_out^T W_U neuron-logit-map amplitude
+# spectrum, one panel per weight decay. The output-side mirror of FIG 1. Needs
+# the wl_* snapshot fields; for runs trained before analysis.py recorded them,
+# run  backfill_wl.py RESULTS_DIR exp08  to recompute W_L from the final
+# checkpoints (weight-only, no retraining) before plotting.
+# --------------------------------------------------------------------- #
+if any(pc.final_snap(r).get("wl_freq_power_full") for r in runs):
+    fig, axes = plt.subplots(nrow, ncol, figsize=(4.7 * ncol, 2.9 * nrow),
+                             sharey=True, squeeze=False)
+    for ax, wd in zip(axes.flat, WDS):
+        sel = pc.select(runs, weight_decay=wd)
+        specs = [_amp_spectrum(pc.final_snap(r)["wl_freq_power_full"], P)
+                 for r in sel if pc.final_snap(r).get("wl_freq_power_full")]
+        if not specs:
+            continue
+        for j, f in enumerate(INJ):
+            ax.axvline(f, color="green", ls="--", lw=1.0, alpha=0.6,
+                       label="injected" if j == 0 else None)
+        for sp in specs:
+            ax.plot(freqs, sp, color=COL[wd], alpha=0.3, lw=0.9)
+        ax.plot(freqs, np.mean(specs, 0), color=COL[wd], lw=1.8)
+        ax.set_ylim(bottom=0)                       # amplitude is non-negative
+        ax.set_title(f"wd = {wd:g}{wd_tag(sel)}", fontsize=10)
+        ax.legend(loc="upper right", fontsize=7.5, frameon=True)
+    for ax in axes.flat[len(WDS):]:
+        ax.set_visible(False)
+    fig.supxlabel(f"Fourier frequency index (1..{L})")
+    fig.supylabel("final W_L amplitude  √(power/p)  (logit units)")
+    fig.suptitle(f"Exp08 — final W_L amplitude spectrum vs weight decay (p={P}, "
+                 f"n={N_FIXED} fixed injected pairs)", fontsize=12.5)
+    pc.save(fig, FIG / "wl_spectrum_by_wd.png", cap=(
+        f"Final W_L = W_out^T W_U neuron-logit-map per-frequency amplitude "
+        f"√(power/p) ({L} freqs, logit units) per weight decay; the readout-side "
+        "mirror of we_spectrum_by_wd.png. 4 seeds faint + mean bold, shared "
+        "y-axis, green dashed = the (fixed) injected frequencies. Shows whether "
+        "the output side keeps concentrating on the oracle's frequencies as the "
+        "weight-decay pressure weakens. W_L is weight-only, so this is recomputed "
+        f"post-hoc from each cell's final checkpoint (backfill_wl.py). {WD_NOTE}"))
+else:
+    print("  [wl_spectrum] no wl_freq_power_full in snapshots -- run "
+          "backfill_wl.py RESULTS_DIR exp08 to populate it; skipping.")
 
 
 # %% ----------------------------------------------------------------- #

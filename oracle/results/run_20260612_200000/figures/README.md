@@ -90,7 +90,7 @@ present from the start.
 > epoch 0, so live==on throughout and its data/figures are unchanged).
 - `grok_vs_n` — grok epoch vs n by T; both T grok within the n=0 baseline band, far above their injection lines.
 
-## exp02_2 — amplitude (0.5–4×), 13 figures ◐ partial
+## exp02_2 — amplitude (0.5–4×), 11 figures ◐ partial
 **Hypothesis:** higher oracle amplitude makes W_E lazy (offload to oracle) and
 can destabilize training. **Verdict:** dependence-laziness confirmed; structural
 laziness partial; destabilization confirmed but driven by *low n*, not amp alone.
@@ -101,12 +101,11 @@ non-monotonic (amp=2 kills n=1,2 entirely). Structural laziness (lower |W_E|) is
 clear only for n≥3.
 
 - M `dependence_accoff_vs_amp` — amplitude-robust dependence metric (rises with amp).
-- M `laziness_we_norm_vs_amp` — |W_E| drops with amp for n≥3 (offloading).
+- M `laziness_we_norm_vs_amp` — W_E per-token amplitude `‖W_E‖/√p` (residual units) vs amp, with the oracle total `amp·√n` overlaid (dotted, same units, log-y): W_E hovers ~1.0 / dips while the oracle total fans up past it (crossover ~amp 0.7–1).
 - M `laziness_uptake_vs_amp` — self-power on injected freqs vs amp.
-- S `grok_success_heatmap` / `grok_epoch_heatmap` — failure cluster guard (amp×n).
 - S `amp_scaling_caveat` — raw ΔCE rises with amp (mechanical confound; use acc_off).
 - S `perf_vs_amp` — conditioned on grok, high amp doesn't cost final accuracy.
-- M `we_spectrum` — final W_E spectrum, amp(rows)×n(cols), injected freqs marked: the comb lands on the injected sites where the model groks; own-power drops as amp rises (offloading), and the amp=2 n∈{1,2} cells (0/4) show diffuse power with no comb.
+- M `we_spectrum` — W_E spectrum in **per-frequency amplitude** `√(power/p)` (circle radius; residual units = oracle amp), shared **linear** y-axis [0, 2.5]; green dashed = injected freqs. W_E peaks stay ~0.2–0.3 across amps (the embedding keeps only a small self-copy). (exp02_2 figures are rendered minimalist — no captions, terse titles.)
 - M `ablation` — accuracy oracle ON vs forced OFF over training, amp(rows)×n(cols): the ON-OFF gap WIDENS down the rows (louder oracle ⇒ more dependence, acc_off falls — ~0.97→0.11 at n=3), the trajectory companion to the scalar `dependence_accoff_vs_amp`.
 - S `ce_ablation` — same grid in cross-entropy (log-y, chance=ln p marked): blue (ON) groks to ~0, red (OFF) stays elevated. CAVEAT: the CE gap grows down the rows partly as a measurement artefact — removing a louder oracle mechanically inflates CE (ce_off ~4.8→16 from amp=0.5→4); use the accuracy `ablation` for the amplitude-robust read.
 
@@ -120,7 +119,7 @@ cos(w(x+y−z)), oracle live) shows a clean **crossover**: as amp rises, input N
 **more** distinct injected freqs than W_E encodes — the surplus is read straight from the
 live oracle. **The laziness is a property of W_E, not the whole model.**
 - M `input_vs_output_freqs` — N_eff for W_E (input), W_L (readout weights) and logits (output) vs amp, faceted by n; only W_E falls — the headline (see the W_L note below).
-- M `freq_usage_n8_detail` — per-injected-freq share of W_E vs logit power, one panel per amp (n=8): at amp=4, f17/f25 are tiny in W_E but large in the logits (oracle-supplied); at amp=0.5 the two match.
+- M `contribution_decomp_n8` — "the other contribution" (n=8, columns=amp), single row: **build vs ground truth (residual units).** Green ceiling = the oracle's *known* per-freq amplitude `amp`; blue stems = what W_E rebuilds at each injected freq; the gap is oracle-supplied. Metric **`s`** = ⟨W_E amp at injected⟩/`amp` = self-supply fraction (1 = W_E rebuilds the whole oracle freq; 0 = pure free-riding); **collapses 0.65 → 0.31 → 0.13 → 0.05** as amp rises → the live oracle supplies the rest. **W_E-only on purpose:** W_L's absolute amplitude is gauge-free (ReLU lets W_in/c, W_out·c leave the model identical while W_L scales by c), so it has no fixed ruler and can't share the residual axis with the oracle; only W_E is anchored (read against the frozen oracle in the residual stream). W_E↔W_L can only be compared on *shape* — see `input_vs_output_freqs` (N_eff).
 
 **Neuron-logit map W_L — the readout-side answer (laziness is W_E-specific):**
 `analysis.wl_fourier_power` computes the Fourier spectrum of the neuron-logit map
@@ -138,7 +137,9 @@ to ~2.7 — so the whole-model machinery uses the injected set regardless of
 amplitude; only W_E offloads. (Also validated on the exp07 frozen-W_E run:
 `run_20260616_110846/figures/exp07/we_vs_wl_spectrum.png` — W_E frozen-flat, W_L
 sharp on the injected freqs.)
-- M `wl_spectrum` — final neuron-logit-map W_L spectrum, amp(rows)×n(cols), injected freqs marked: the amp×n mirror of `we_spectrum`, but the comb on the injected sites stays sharp at high amp (the readout doesn't get lazy).
+- M `wl_spectrum` — neuron-logit map W_L in per-frequency amplitude `√(power/p)` (**LOGIT-space units** — own ruler, not the oracle/W_E residual scale), shared **linear** y-axis [0, 2.5]; the amp×n mirror of `we_spectrum`, but the comb stays sharp at high amp (the readout doesn't get lazy). A few W_L peaks exceed 2.5 and clip at the shared scale.
+
+**Units convention (amplitude, per-frequency):** the spectra are standardized on per-frequency amplitude `A(k) = √(we/wl_freq_power[k] / p)` — the *circle radius* of frequency k, in the matrix's native units. For the oracle this equals `amp` exactly; for **W_E** it's residual-stream units (directly comparable to `amp`); for **W_L** it's logit-space units (its own ruler). Aggregate norm `‖W‖/√p = √(Σ_k A(k)²)`. The N_eff figure (`input_vs_output_freqs`) stays deliberately **dimensionless** — that's the only correct way to compare W_E/W_L/logits, which live in different unit spaces.
 
 ## exp04 — oracle reliability (1.0→0.0), 8 figures ⚠️ contradicts hypothesis
 **Hypothesis:** higher n (more pairs) gives robustness to corruption.

@@ -98,6 +98,39 @@ def make_fourier_oracle(config: transformer.Config, freqs, amp: float = 1.0,
 
 
 # --------------------------------------------------------------------------- #
+# Generic per-token-id table oracle (carrier for the "organic" embedding oracle)
+# --------------------------------------------------------------------------- #
+def make_table_oracle(config: transformer.Config, table, injected_freqs=None,
+                      kind: str = "table", device=None):
+    """Frozen per-token-id oracle from an explicit ``(d_vocab, d_model)`` table.
+
+    The general form of `make_fourier_oracle`: any frozen additive feature that is
+    a pure function of the token id is just a row lookup ``table[x]``. The
+    *organic* oracle (exp09) uses this with ``table`` = a (scaled) donor embedding
+    ``W_E.T`` lifted from a baseline model that already grokked — i.e. we inject a
+    real learned embedding instead of idealized cos/sin pairs. `injected_freqs`
+    is recorded only so the uptake metrics know which frequencies to score (the
+    table itself is dense over the whole residual stream, unlike the Fourier
+    oracle's two reserved dims per pair).
+
+    Returns ``fn(x)`` with attributes ``.table, .freqs, .kind``.
+    """
+    device = device or config.device
+    table = t.as_tensor(table, dtype=t.float32, device=device)
+    assert table.shape == (config.d_vocab, config.d_model), (
+        f"table must be (d_vocab, d_model)=({config.d_vocab},{config.d_model}), "
+        f"got {tuple(table.shape)}")
+
+    def fn(x):
+        return table[x]                              # (batch, n_ctx, d_model)
+
+    fn.table = table
+    fn.freqs = list(injected_freqs or [])
+    fn.kind = kind
+    return fn
+
+
+# --------------------------------------------------------------------------- #
 # Per-example variable-frequency oracle (for the "unreliable oracle" experiment)
 # --------------------------------------------------------------------------- #
 def _freq_map_to_tensor(freq_map, p, device):

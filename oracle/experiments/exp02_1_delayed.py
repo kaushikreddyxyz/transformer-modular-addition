@@ -49,7 +49,7 @@ def adoption_around_T(res):
     return pick(before), pick(after)
 
 
-# %% run (sequential; use experiments/runner.py to parallelize)
+# %% run (sequential; use `python -m modular_addition.oracle.runner` to parallelize)
 if __name__ == "__main__" or "ipykernel" in sys.modules:
     results = sweep.run_all(get_runs())
 

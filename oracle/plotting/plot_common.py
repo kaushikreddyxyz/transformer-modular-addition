@@ -169,13 +169,17 @@ def caption(fig, text):
              color="0.30", wrap=True)
 
 
+# Set False to suppress the burned-in captions (minimalist figures).
+SHOW_CAPTIONS = True
+
+
 def save(fig, path, cap=None, tight=True):
     if tight:
         try:
             fig.tight_layout()
         except Exception:
             pass
-    if cap:
+    if cap and SHOW_CAPTIONS:
         caption(fig, cap)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight", dpi=130)
