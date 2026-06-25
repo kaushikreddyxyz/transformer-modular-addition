@@ -184,21 +184,21 @@ def fig_dependence_accoff(runs, configs, outdir):
 
 
 def fig_spectrum_compare(runs, configs, outdir):
-    """Mean final W_E Fourier-power spectrum overlaid per config (56 freqs)."""
+    """Mean final W_E amplitude spectrum (shape, normalized) per config (56 freqs)."""
     fig, (axS, axH) = plt.subplots(1, 2, figsize=(12.6, 4.8))
 
-    # left: mean normalized W_E freq-power spectrum, one line per config
+    # left: mean shape-normalized W_E amplitude spectrum, one line per config
     nfreq = None
     for cfg in configs:
         rs = pc.select(runs, hint=cfg)
         specs = []
         for r in rs:
-            p = pc.final_snap(r).get("we_freq_power_full")
-            if not p:
+            fp = pc.final_snap(r).get("we_freq_power_full")
+            if not fp:
                 continue
-            p = np.asarray(p, float)
-            tot = p.sum()
-            specs.append(p / tot if tot > 0 else p)
+            a = pc.amp_spectrum(fp)                 # amplitude √(power/p)
+            tot = a.sum()
+            specs.append(a / tot if tot > 0 else a)
         if not specs:
             continue
         M = np.vstack(specs)
@@ -207,11 +207,11 @@ def fig_spectrum_compare(runs, configs, outdir):
         mean = M.mean(0)
         sd = M.std(0)
         axS.plot(freqs, mean, color=COLOR[cfg], lw=1.9, label=PRETTY[cfg])
-        # power is non-negative: clip the lower band at 0
+        # amplitude is non-negative: clip the lower band at 0
         axS.fill_between(freqs, np.clip(mean - sd, 0, None), mean + sd,
                          color=COLOR[cfg], alpha=0.12)
     axS.set_xlabel("frequency index (1..%d)" % (nfreq or 56))
-    axS.set_ylabel("mean normalized W_E power")
+    axS.set_ylabel("mean normalized W_E amplitude")
     axS.set_title("Learned frequency spectrum (shape) by config")
     axS.legend(fontsize=8)
 
@@ -239,23 +239,25 @@ def fig_we_spectrum(runs, configs, outdir):
                              sharex=True, sharey=True, squeeze=False)
     for ax, cfg in zip(axes[0], configs):
         rs = pc.select(runs, hint=cfg)
-        specs = [np.asarray(pc.final_snap(r)["we_freq_power_full"], float)
+        specs = [pc.amp_spectrum(pc.final_snap(r)["we_freq_power_full"])
                  for r in rs if pc.final_snap(r).get("we_freq_power_full")]
         if specs:
             freqs = np.arange(1, len(specs[0]) + 1)
             for sp in specs:
                 ax.plot(freqs, sp, color=COLOR[cfg], alpha=0.30, lw=0.8)
             ax.plot(freqs, np.mean(specs, 0), color=COLOR[cfg], lw=1.8)
+            ax.set_ylim(bottom=0)               # amplitude is non-negative
         gk = sum(pc.groked(r) for r in rs)
         ax.set_title(f"{PRETTY[cfg]}  ({gk}/{len(rs)} grok)", fontsize=9.5)
         ax.set_xlabel("freq index (1..56)")
-    axes[0][0].set_ylabel("final W_E Fourier power")
-    fig.suptitle("exp05 — final W_E spectrum by hint config (4 seeds + mean)",
+    axes[0][0].set_ylabel("final W_E amplitude  √(power/p)")
+    fig.suptitle("exp05 — final W_E amplitude spectrum by hint config (4 seeds + mean)",
                  fontsize=12.5)
-    cap = ("Final W_E Fourier power spectrum per config (4 seeds faint + mean "
-           "bold). The hint injects NOTHING into W_E, so the question is whether "
-           "it reshapes the LEARNED basis vs baseline (gray): a sparser / lower "
-           "comb = a simpler, lazier embedding. Companion to spectrum_compare.")
+    cap = ("Final W_E per-frequency amplitude √(power/p) spectrum per config "
+           "(4 seeds faint + mean bold). The hint injects NOTHING into W_E, so "
+           "the question is whether it reshapes the LEARNED basis vs baseline "
+           "(gray): a sparser / lower comb = a simpler, lazier embedding. "
+           "Companion to spectrum_compare.")
     pc.save(fig, Path(outdir) / "we_spectrum.png", cap=cap)
 
 

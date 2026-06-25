@@ -266,16 +266,16 @@ def _grok_badge(ax, sub):
 
 # %% ----------------------------------------------------------------- #
 # FIG 6 — final W_E Fourier spectrum, rel (rows, desc) x n (cols)
-# WHERE the embedding's power lands; green = TRUE injected freqs. Raw power
-# with per-panel y-scale so within-panel structure (the comb) is visible even
-# when overall magnitude differs across cells.
+# WHERE the embedding's amplitude lands; green = TRUE injected freqs. Amplitude
+# √(power/p) (residual units) with per-panel y-scale so within-panel structure
+# (the comb) is visible even when overall magnitude differs across cells.
 # --------------------------------------------------------------------- #
 fig, axes = _grid(sharey=False)
 for i, rel in enumerate(RELS_DESC):
     for j, n in enumerate(NS):
         ax = axes[i, j]
         sub = pc.select(runs, rel=rel, n=n)
-        specs = [np.asarray(pc.final_snap(r)["we_freq_power_full"], float)
+        specs = [pc.amp_spectrum(pc.final_snap(r)["we_freq_power_full"])
                  for r in sub if pc.final_snap(r).get("we_freq_power_full")]
         if specs:
             freqs = np.arange(1, len(specs[0]) + 1)
@@ -284,6 +284,7 @@ for i, rel in enumerate(RELS_DESC):
             for sp in specs:
                 ax.plot(freqs, sp, color=COL[n], alpha=0.22, lw=0.7)
             ax.plot(freqs, np.mean(specs, 0), color=COL[n], lw=1.4)
+            ax.set_ylim(bottom=0)               # amplitude is non-negative
         _grok_badge(ax, sub)
         if i == 0:
             ax.set_title(f"n = {n}", fontsize=10)
@@ -294,15 +295,16 @@ fig.legend(handles=[Line2D([], [], color="green", ls="--", lw=1.2,
                            label="TRUE injected freqs")],
            loc="upper right", bbox_to_anchor=(0.998, 0.998), fontsize=8)
 fig.supxlabel("Fourier frequency index (1..56)")
-fig.suptitle("Exp04 — final W_E Fourier spectrum  (rows: reliability 1.0->0.0, "
+fig.supylabel("final W_E amplitude  √(power/p)  (residual units)")
+fig.suptitle("Exp04 — final W_E amplitude spectrum  (rows: reliability 1.0->0.0, "
              "cols: n injected pairs)", fontsize=12.5)
 pc.save(fig, FIG / "we_spectrum.png",
-        cap=("Final W_E power spectrum per (rel, n) cell (4 seeds faint + mean; "
-             "green dashed = TRUE base freqs; corner badge = grok count). At "
-             "high rel the embedding builds a clean comb on the TRUE freqs; as "
-             "reliability drops the comb erodes and at rel<=0.25 the high-n "
-             "cells (which never grok) show diffuse power with no comb. "
-             f"{CONFOUND}"))
+        cap=("Final W_E per-frequency amplitude √(power/p) per (rel, n) cell "
+             "(4 seeds faint + mean; green dashed = TRUE base freqs; corner "
+             "badge = grok count). At high rel the embedding builds a clean comb "
+             "on the TRUE freqs; as reliability drops the comb erodes and at "
+             "rel<=0.25 the high-n cells (which never grok) show diffuse "
+             f"amplitude with no comb. {CONFOUND}"))
 
 
 # %% ----------------------------------------------------------------- #

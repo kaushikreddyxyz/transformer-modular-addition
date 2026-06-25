@@ -69,7 +69,7 @@ def wd_tag(sel):
 def _amp_spectrum(power_full, p):
     """Per-frequency amplitude = sqrt(power / p), in W_E's native residual units
     — directly comparable to the oracle amp (matches exp02_2's convention)."""
-    return np.sqrt(np.asarray(power_full, float) / p)
+    return pc.amp_spectrum(power_full, p)          # shared convention helper
 
 
 # %% ----------------------------------------------------------------- #

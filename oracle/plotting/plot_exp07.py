@@ -105,7 +105,7 @@ pc.save(fig, FIG / "grok_dynamics_by_n.png", cap=(
 
 
 # %% ----------------------------------------------------------------- #
-# FIG 2 (the ask) — final W_E power spectrum per n: the FROZEN control
+# FIG 2 (the ask) — final W_E amplitude spectrum per n: the FROZEN control
 # --------------------------------------------------------------------- #
 ncol = min(len(INJ_NS), 3)
 nrow = int(np.ceil(len(INJ_NS) / ncol))
@@ -114,7 +114,7 @@ fig, axes = plt.subplots(nrow, ncol, figsize=(4.6 * ncol, 3.7 * nrow),
 freqs = np.arange(1, L + 1)
 for ax, n in zip(axes.flat, INJ_NS):
     sel = pc.select(runs, n=n)
-    specs = [np.asarray(pc.final_snap(r)["we_freq_power_full"], float)
+    specs = [pc.amp_spectrum(pc.final_snap(r)["we_freq_power_full"])
              for r in sel if pc.final_snap(r).get("we_freq_power_full")]
     if not specs:
         continue
@@ -130,15 +130,16 @@ for ax, n in zip(axes.flat, INJ_NS):
 for ax in axes.flat[len(INJ_NS):]:
     ax.set_visible(False)
 fig.supxlabel(f"Fourier frequency index (1..{L})")
-fig.supylabel("final W_E power")
+fig.supylabel("final W_E amplitude  √(power/p)  (residual units)")
 fig.suptitle(f"Exp07 (frozen W_E) — the embedding spectrum stays at random "
              f"init: NO uptake (p={P})", fontsize=12.5)
 pc.save(fig, FIG / "we_spectrum_by_n.png", cap=(
-    f"Final W_E Fourier power spectrum ({L} freqs) per n; 4 seeds faint + mean "
-    "bold, green dashed = injected frequencies. The spectrum is FLAT at its "
-    "random-init level with NO peaks on the injected sites — the frozen "
-    "embedding cannot adopt them, unlike the trainable-W_E exp01/exp08 where "
-    f"power concentrates on exactly these lines. Grokking still happens. {FZ}"))
+    f"Final W_E per-frequency amplitude √(power/p) ({L} freqs, residual units) "
+    "per n; 4 seeds faint + mean bold, green dashed = injected frequencies. The "
+    "spectrum is FLAT at its random-init level with NO peaks on the injected "
+    "sites — the frozen embedding cannot adopt them, unlike the trainable-W_E "
+    f"exp01/exp08 where amplitude concentrates on exactly these lines. Grokking "
+    f"still happens. {FZ}"))
 
 
 # %% ----------------------------------------------------------------- #

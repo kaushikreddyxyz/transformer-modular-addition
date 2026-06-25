@@ -151,7 +151,7 @@ def fig_spectrum(runs, outdir, d, label):
     fig, axes = _grid(d["spec"], ncol=3, panel=(4.6, 2.7), sharey=False)
     for ax, n in zip(axes.flat, d["spec"]):
         sel = pc.select(runs, n=n)
-        specs = [np.asarray(pc.final_snap(r)["we_freq_power_full"], float)
+        specs = [pc.amp_spectrum(pc.final_snap(r)["we_freq_power_full"])
                  for r in sel if pc.final_snap(r).get("we_freq_power_full")]
         if not specs:
             continue
@@ -164,17 +164,19 @@ def fig_spectrum(runs, outdir, d, label):
         for sp in specs:
             ax.plot(freqs, sp, color=cmap[n], alpha=0.3, lw=0.9)
         ax.plot(freqs, np.mean(specs, 0), color=cmap[n], lw=1.7)
+        ax.set_ylim(bottom=0)                       # amplitude is non-negative
         ax.set_title(f"n = {n}{_tag(sel)}", fontsize=10)
         ax.legend(loc="upper right", fontsize=7.5, frameon=True)
     _hide_extra(axes, d["spec"])
     fig.supxlabel(f"Fourier frequency index (1..{d['L']})")
-    fig.supylabel("final W_E power")
-    fig.suptitle(f"{label} — power piles up on the injected sites "
+    fig.supylabel("final W_E amplitude  √(power/p)  (residual units)")
+    fig.suptitle(f"{label} — amplitude piles up on the injected sites "
                  f"(final W_E spectrum, p={d['p']})", fontsize=12.5)
     pc.save(fig, outdir / "spectrum.png", cap=(
-        f"Final W_E Fourier power spectrum ({d['L']} freqs) per n; 4 seeds "
-        "faint + mean bold, green dashed = injected frequencies. For grokking "
-        "n the peaks land on the injected sites with little leakage."))
+        f"Final W_E per-frequency amplitude √(power/p) ({d['L']} freqs, residual "
+        "units) per n; 4 seeds faint + mean bold, green dashed = injected "
+        "frequencies. For grokking n the peaks land on the injected sites with "
+        "little leakage."))
 
 
 def fig_ablation(runs, outdir, d, label):

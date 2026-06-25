@@ -270,7 +270,8 @@ class ModelGrid:
             with open(os.path.join(d, f"{specs[m]['label']}.result.json"), "w") as f:
                 json.dump(result, f, indent=2, default=harness._json_default)
         if use_wandb:
-            _log_aggregate(specs, histories, grok_epoch)
+            _log_per_model(specs, cfg_dicts, histories, snaps, grok_epoch,
+                           inj_from, num_epochs)
         return M
 
 
@@ -283,27 +284,45 @@ def _P(x):
     return Path(x)
 
 
-def _log_aggregate(specs, histories, grok_epoch):
-    """One wandb run summarizing the stack (median/min/max curves, frac grokked)."""
+def _log_per_model(specs, cfg_dicts, histories, snaps, grok_epoch, inj_from,
+                   num_epochs):
+    """Replay each stacked model into its OWN wandb run, post-training.
+
+    Mirrors the per-model path (sweep.execute -> harness.train): run named
+    `<exp>/<label>`, grouped by exp, config = model config + sweep axes, scalars
+    logged at step=epoch, with grok_epoch / final_test_acc summaries. Costs the
+    training loop nothing — histories/snaps were buffered during the stack run
+    and flushed here, so the only difference from the old path is that the runs
+    appear at the end rather than streaming live.
+    """
     try:
         import wandb
-        run = wandb.init(project=harness.WANDB_PROJECT,
-                         group=specs[0]["exp"],
-                         name=f"{specs[0]['exp']}/stack_{len(specs)}",
-                         reinit=True)
-        # align on the shortest history; log distribution per logged epoch
-        L = min(len(h) for h in histories)
-        for i in range(L):
-            tel = [h[i]["test_loss"] for h in histories]
-            tea = [h[i]["test_acc"] for h in histories]
-            run.log(dict(epoch=histories[0][i]["epoch"],
-                         test_loss_med=float(np.median(tel)),
-                         test_loss_max=float(np.max(tel)),
-                         test_acc_med=float(np.median(tea)),
-                         frac_grokked=float(np.mean([a >= 0.99 for a in tea]))),
-                    step=histories[0][i]["epoch"])
-        run.summary["n_models"] = len(specs)
-        run.summary["n_grokked"] = int((grok_epoch >= 0).sum())
-        run.finish()
     except Exception as e:  # noqa: BLE001 — monitoring must never kill a run
-        print(f"(wandb aggregate skipped: {e})")
+        print(f"(wandb skipped: {e})")
+        return
+    for m, s in enumerate(specs):
+        try:
+            wcfg = dict(cfg_dicts[m])
+            wcfg.update(label=s["label"], inject_from_epoch=int(inj_from[m]),
+                        num_epochs=num_epochs)
+            wcfg.update(s.get("axes", {}))     # axes override, as in harness
+            run = wandb.init(project=harness.WANDB_PROJECT, group=s["exp"],
+                             name=f"{s['exp']}/{s['label']}", config=wcfg,
+                             reinit=True)
+            # Merge eval record + snapshot scalars per epoch: one ordered log
+            # call per epoch keeps step monotonic (wandb drops backward steps).
+            events = {}
+            for rec in histories[m]:
+                events.setdefault(rec["epoch"], {}).update(rec)
+            for snap in snaps[m]:
+                events.setdefault(snap["epoch"], {}).update(
+                    harness._snapshot_scalars(snap))
+            for ep in sorted(events):
+                run.log(events[ep], step=ep)
+            ge = int(grok_epoch[m])
+            run.summary["grok_epoch"] = ge if ge >= 0 else None
+            run.summary["final_test_acc"] = (
+                histories[m][-1]["test_acc"] if histories[m] else None)
+            run.finish()
+        except Exception as e:  # noqa: BLE001 — one bad run must not kill the rest
+            print(f"(wandb run {s.get('label')} skipped: {e})")

@@ -128,7 +128,7 @@ def _mark_injected(ax, freqs):
 def _amp_spectrum(power_full, p):
     """Per-frequency amplitude = circle radius = sqrt(power / p), in the matrix's
     native units — the one quantity directly comparable to the oracle amp."""
-    return np.sqrt(np.asarray(power_full, float) / p)
+    return pc.amp_spectrum(power_full, p)          # shared convention helper
 
 
 def _p_of(runs):

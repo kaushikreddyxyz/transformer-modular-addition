@@ -35,7 +35,7 @@ CKPT_NAME = "ep030000.pth"
 
 def _amp(freq_power, p):
     """Per-frequency amplitude = sqrt(power / p), same convention as exp02_2."""
-    return np.sqrt(np.asarray(freq_power, float) / p)
+    return pc.amp_spectrum(freq_power, p)          # shared convention helper
 
 
 def _spectra_for_ckpt(path):

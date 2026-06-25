@@ -88,6 +88,22 @@ def frac_we_power_injected(s):
     return float(np.sum(inj)) / tot if tot > 0 else None
 
 
+def amp_spectrum(power_full, p=None):
+    """Per-frequency AMPLITUDE = sqrt(power / p) of a Fourier-power spectrum.
+
+    The single shared convention for every W_E / W_L spectrum figure: amplitude
+    is in the matrix's native units (residual for W_E, logit for W_L) and is
+    directly comparable to the synthetic oracle's amp — unlike raw Fourier
+    *power*, whose scale is arbitrary. `p` defaults to the recovered modulus
+    2*len+1 (a length-L spectrum spans L = p//2 frequency bins), so callers
+    almost never need to pass it. Amplitude is non-negative; set ylim bottom=0.
+    """
+    power = np.asarray(power_full, float)
+    if p is None:
+        p = 2 * len(power) + 1
+    return np.sqrt(power / p)
+
+
 def frac_injected_in_key(s):
     inj = s.get("injected_freqs")
     if not inj:

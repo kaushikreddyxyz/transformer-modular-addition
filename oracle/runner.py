@@ -1,4 +1,4 @@
-"""Parallel experiment runner — farm run specs across GPU workers.
+"""Experiment runner — train run specs, stacked into batched models by default.
 
 Experiment modules are AUTO-DISCOVERED: any `experiments/exp*.py` that defines
 `get_runs()` (returning JSON run specs) is collected — define a new experiment
