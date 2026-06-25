@@ -19,3 +19,7 @@ oracle/results/**/*.pth
 oracle/results/exp00/
 
 .DS_Store
+
+# Secrets (HF_TOKEN, WANDB_TOKEN) — fill from .env.example
+.env
+.env.local
